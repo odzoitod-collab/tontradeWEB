@@ -61,6 +61,18 @@ const TradingPage: React.FC<TradingPageProps> = ({ activeDeals, onCreateDeal, ba
     return () => clearInterval(timer);
   }, []);
 
+  // Обновляем previousPrices каждые 3 секунды для индикаторов направления
+  useEffect(() => {
+    const priceUpdateTimer = setInterval(() => {
+      activeDeals.forEach(deal => {
+        const currentPrice = getSimulatedPrice(deal);
+        setPreviousPrices(prev => ({ ...prev, [deal.id]: currentPrice }));
+      });
+    }, 3000); // Каждые 3 секунды
+    
+    return () => clearInterval(priceUpdateTimer);
+  }, [activeDeals]);
+
   useEffect(() => { if (errorMsg) setErrorMsg(null); }, [amount]);
 
   const filteredPairs = useMemo(() => {
@@ -424,11 +436,6 @@ const TradingPage: React.FC<TradingPageProps> = ({ activeDeals, onCreateDeal, ba
                 const priceChange = currentPrice - prevPrice;
                 const isPriceUp = priceChange > 0.0001;
                 const isPriceDown = priceChange < -0.0001;
-                
-                // Обновляем предыдущую цену каждые 3 секунды
-                if (Math.floor(elapsed) % 3 === 0 && Math.floor(elapsed) !== 0) {
-                  setPreviousPrices(prev => ({ ...prev, [deal.id]: currentPrice }));
-                }
 
                 return (
                   <div key={deal.id} className={`bg-[#0f0f0f] rounded-2xl p-4 mb-3 border relative overflow-hidden transition-all ${isWinning ? 'border-[#00C896]/30' : 'border-[#FF3B30]/30'}`}>
