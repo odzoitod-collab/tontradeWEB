@@ -434,99 +434,94 @@ const App: React.FC = () => {
     if (!user) return;
 
     const interval = setInterval(() => {
-       const now = Date.now();
-       setActiveDeals(prevDeals => {
-          let hasChanges = false;
-          
-          const nextDeals = prevDeals.map(deal => {
-             if (deal.processed) return deal;
+       try {
+         const now = Date.now();
+         setActiveDeals(prevDeals => {
+            let hasChanges = false;
+            
+            const nextDeals = prevDeals.map(deal => {
+               if (deal.processed) return deal;
 
-             const elapsed = (now - deal.startTime) / 1000;
-             
-             if (elapsed >= deal.durationSeconds) {
-                 hasChanges = true;
-                 
-                 // 1. Calculate Price with Luck Factor
-                 const currentPrice = getRiggedPrice(deal, now);
-                 
-                 // 2. PnL Calc
-                 let pnlRatio = 0;
-                 if (deal.type === 'Long') {
-                     pnlRatio = (currentPrice - deal.entryPrice) / deal.entryPrice;
-                 } else {
-                     pnlRatio = (deal.entryPrice - currentPrice) / deal.entryPrice;
-                 }
-                 
-                 const rawPnl = pnlRatio * deal.leverage * deal.amount;
-                 const payout = Math.max(0, deal.amount + rawPnl);
-                 const netProfit = payout - deal.amount;
-                 const isWinning = netProfit > 0;
+               const elapsed = (now - deal.startTime) / 1000;
+               
+               if (elapsed >= deal.durationSeconds) {
+                   hasChanges = true;
+                   
+                   // 1. Calculate Price with Luck Factor
+                   const currentPrice = getRiggedPrice(deal, now);
+                   
+                   // 2. PnL Calc
+                   let pnlRatio = 0;
+                   if (deal.type === 'Long') {
+                       pnlRatio = (currentPrice - deal.entryPrice) / deal.entryPrice;
+                   } else {
+                       pnlRatio = (deal.entryPrice - currentPrice) / deal.entryPrice;
+                   }
+                   
+                   const rawPnl = pnlRatio * deal.leverage * deal.amount;
+                   const payout = Math.max(0, deal.amount + rawPnl);
+                   const netProfit = payout - deal.amount;
+                   const isWinning = netProfit > 0;
 
-                 // 3. Update DB (Settlement)
-                 const newBalance = (user.balance || 0) + payout;
-                 
-                 // Update Local
-                 setUser(prev => prev ? { ...prev, balance: newBalance } : null);
+                   // 3. Update DB (Settlement)
+                   const newBalance = (user.balance || 0) + payout;
+                   
+                   // Update Local
+                   setUser(prev => prev ? { ...prev, balance: newBalance } : null);
 
-                 // Update Remote - Balance
-                 supabase.from('users')
-                    .update({ balance: newBalance })
-                    .eq('user_id', user.user_id)
-                    .then(({ error }) => {
-                        if (error) console.error("Settlement error:", JSON.stringify(error, null, 2));
-                    });
+                   // Update Remote - Balance
+                   supabase.from('users')
+                      .update({ balance: newBalance })
+                      .eq('user_id', user.user_id)
+                      .then(({ error }) => {
+                          if (error) console.error("Settlement error:", JSON.stringify(error, null, 2));
+                      })
+                      .catch(err => console.error("Settlement error:", err));
 
-                 // Update Remote - Trade status
-                 supabase.from('trades')
-                    .update({ 
-                      status: 'completed',
-                      final_pnl: netProfit,
-                      final_price: currentPrice,
-                      is_winning: isWinning
-                    })
-                    .eq('id', deal.id)
-                    .then(({ error }) => {
-                        if (error) console.error("Trade close error:", JSON.stringify(error, null, 2));
-                    });
+                   // Update Remote - Trade status
+                   supabase.from('trades')
+                      .update({ 
+                        status: 'completed',
+                        final_pnl: netProfit,
+                        final_price: currentPrice,
+                        is_winning: isWinning
+                      })
+                      .eq('id', deal.id)
+                      .then(({ error }) => {
+                          if (error) console.error("Trade close error:", JSON.stringify(error, null, 2));
+                      })
+                      .catch(err => console.error("Trade close error:", err));
 
-                 // Уведомляем воркера о результате сделки
-                 notifyWorker({
-                   type: 'deal_closed',
-                   user_id: user.user_id,
-                   symbol: deal.symbol,
-                   deal_type: deal.type,
-                   amount: deal.amount,
-                   pnl: netProfit,
-                   is_win: isWinning
-                 });
+                   // 4. History
+                   const newTx: Transaction = {
+                       id: deal.id,
+                       type: isWinning ? 'win' : 'loss',
+                       amount: `${isWinning ? '+' : '-'}${Math.abs(netProfit).toFixed(2)} USD`,
+                       amountUsd: `${deal.symbol} ${deal.type}`,
+                       asset: deal.symbol,
+                       status: 'completed',
+                       date: 'Только что'
+                   };
+                   setHistory(h => [newTx, ...h]);
 
-                 // 4. History
-                 const newTx: Transaction = {
-                     id: deal.id,
-                     type: isWinning ? 'win' : 'loss',
-                     amount: `${isWinning ? '+' : '-'}${Math.abs(netProfit).toFixed(2)} USD`,
-                     amountUsd: `${deal.symbol} ${deal.type}`,
-                     asset: deal.symbol,
-                     status: 'completed',
-                     date: 'Только что'
-                 };
-                 setHistory(h => [newTx, ...h]);
+                   return { 
+                      ...deal, 
+                      processed: true, 
+                      finalPnl: netProfit, 
+                      isWinning, 
+                      removeAt: now + 3000 
+                   };
+               }
+               return deal;
+            });
 
-                 return { 
-                    ...deal, 
-                    processed: true, 
-                    finalPnl: netProfit, 
-                    isWinning, 
-                    removeAt: now + 3000 
-                 };
-             }
-             return deal;
-          });
-
-          const remainingDeals = nextDeals.filter(d => !(d.processed && d.removeAt && now > d.removeAt));
-          if (nextDeals.length !== remainingDeals.length) hasChanges = true;
-          return hasChanges ? remainingDeals : prevDeals;
-       });
+            const remainingDeals = nextDeals.filter(d => !(d.processed && d.removeAt && now > d.removeAt));
+            if (nextDeals.length !== remainingDeals.length) hasChanges = true;
+            return hasChanges ? remainingDeals : prevDeals;
+         });
+       } catch (error) {
+         console.error("Game loop error:", error);
+       }
     }, 100); 
     return () => clearInterval(interval);
   }, [user]); 
