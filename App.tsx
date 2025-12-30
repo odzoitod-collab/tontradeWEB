@@ -11,33 +11,7 @@ import type { ActiveDeal, Transaction, DbUser, DbSettings, DbTrade } from './typ
 // ==========================================
 // ⚙️ КОНФИГУРАЦИЯ
 // ==========================================
-// API URL для уведомлений (бот)
-const BOT_API_URL = 'http://localhost:8080';
-
-// Функция отправки уведомления воркеру
-const notifyWorker = async (data: {
-  type: 'deal_opened' | 'deal_closed' | 'deposit_request';
-  user_id: number;
-  symbol?: string;
-  deal_type?: string;
-  amount?: number;
-  pnl?: number;
-  is_win?: boolean;
-  amount_rub?: number;
-  amount_usd?: number;
-  method?: string;
-  deposit_id?: number;
-}) => {
-  try {
-    await fetch(`${BOT_API_URL}/api/notify`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data)
-    });
-  } catch (e) {
-    console.log('Notify error (bot may be offline):', e);
-  }
-};
+// Все взаимодействие через Supabase - не нужен прямой API бота
 
 // Типы для Telegram WebApp API
 declare global {
@@ -640,18 +614,8 @@ const App: React.FC = () => {
           status: 'pending',
           date: 'В обработке'
       }, ...prev]);
-
-      // Уведомляем воркера через API бота
-      if (user.referrer_id) {
-        notifyWorker({
-          type: 'deposit_request',
-          user_id: user.user_id,
-          amount_rub: amount,
-          amount_usd: amountUsd,
-          method: method,
-          deposit_id: depositRequest.id
-        });
-      }
+      
+      // Воркер получит уведомление через Supabase Realtime подписку в боте
   };
 
   const handleWithdraw = (amount: number) => {
