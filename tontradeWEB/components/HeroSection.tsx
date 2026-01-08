@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback, memo } from 'react';
 import { TonLogo } from '../icons';
-import { ChevronDown, HelpCircle, Headset, Gift, X, Loader2, CheckCircle2 } from 'lucide-react';
+import { ChevronDown, HelpCircle, Headset, Gift, X, Loader2, CheckCircle2, Minimize2, Maximize2 } from 'lucide-react';
 import { supabase } from '../supabaseClient';
 
 interface HeroSectionProps {
@@ -16,8 +16,10 @@ const HeroSection: React.FC<HeroSectionProps> = ({ onScrollClick, balance, suppo
   const [promoStatus, setPromoStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
   const [promoMessage, setPromoMessage] = useState('');
   const [rewardAmount, setRewardAmount] = useState(0);
+  const [promoHeight, setPromoHeight] = useState<'small' | 'full'>('small');
+  const [isPromoAnimating, setIsPromoAnimating] = useState(false);
 
-  const handleActivatePromo = async () => {
+  const handleActivatePromo = useCallback(async () => {
     if (!promoCode.trim() || !userId) return;
     
     setPromoStatus('loading');
@@ -88,13 +90,21 @@ const HeroSection: React.FC<HeroSectionProps> = ({ onScrollClick, balance, suppo
         setPromoStatus('error');
         setPromoMessage('Ошибка сети. Попробуйте позже.');
     }
-  };
+  }, [promoCode, userId, balance]);
 
-  const closePromo = () => {
+  const handleOpenPromo = useCallback(() => {
+    setPromoHeight('small');
+    setIsPromoAnimating(true);
+    setShowPromoModal(true);
+    setTimeout(() => setIsPromoAnimating(false), 300);
+  }, []);
+
+  const closePromo = useCallback(() => {
       setShowPromoModal(false);
       setPromoCode('');
       setPromoStatus('idle');
-  };
+      setPromoHeight('small');
+  }, []);
 
   return (
     <div className="h-full flex flex-col items-center justify-between pt-6 pb-32 px-4 relative">
@@ -103,11 +113,11 @@ const HeroSection: React.FC<HeroSectionProps> = ({ onScrollClick, balance, suppo
       <div className="flex flex-col items-center w-full max-w-md mt-4">
         {/* Logo & Balance */}
         <div className="flex flex-col items-center mb-6">
-          <div className="w-36 h-36 mb-6 relative">
+          <div className="w-36 h-36 mb-6 relative" style={{ willChange: 'transform' }}>
              {/* Glow effect */}
              <div className="absolute inset-0 bg-[#0098EA] ton-glow blur-3xl rounded-full"></div>
              {/* Floating Animation Wrapper */}
-             <div className="w-full h-full ton-logo-container">
+             <div className="w-full h-full ton-logo-container" style={{ willChange: 'transform, filter' }}>
                  <TonLogo className="w-full h-full" />
              </div>
           </div>
@@ -131,7 +141,7 @@ const HeroSection: React.FC<HeroSectionProps> = ({ onScrollClick, balance, suppo
         {/* CTA Button - Moved up */}
         <div className="w-full mb-8">
           <button 
-             onClick={() => setShowPromoModal(true)}
+             onClick={handleOpenPromo}
              className="w-full bg-gradient-to-r from-[#0098EA] to-[#00C896] hover:from-[#0088D1] hover:to-[#00B886] text-white font-bold py-4 rounded-2xl shadow-lg shadow-[#0098EA]/40 transition-all transform active:scale-95 text-lg flex items-center justify-center gap-2"
           >
              <Gift size={24} />
@@ -189,54 +199,143 @@ const HeroSection: React.FC<HeroSectionProps> = ({ onScrollClick, balance, suppo
         <ChevronDown className="text-gray-400" />
       </div>
 
-      {/* --- Promo Modal --- */}
+      {/* --- Promo Bottom Sheet --- */}
       {showPromoModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
-            <div className="absolute inset-0 bg-black/90 backdrop-blur-sm" onClick={closePromo}></div>
-            <div className="bg-[#1c1c1e] w-full max-w-sm rounded-3xl border border-gray-700 relative z-10 p-6 flex flex-col items-center text-center animate-[float_0.3s_ease-out] shadow-2xl shadow-blue-500/10">
-                <button onClick={closePromo} className="absolute top-4 right-4 text-gray-500 hover:text-white"><X size={20} /></button>
-                
-                <div className="w-16 h-16 rounded-full bg-gradient-to-tr from-[#0098EA] to-[#00C896] flex items-center justify-center mb-4 shadow-[0_0_20px_rgba(0,152,234,0.4)]">
-                    <Gift size={32} className="text-white" />
+        <>
+          {/* Backdrop */}
+          <div 
+            className="fixed inset-0 z-[110] bg-black/60 backdrop-blur-sm transition-opacity" 
+            onClick={() => {
+              if (promoHeight === 'small') {
+                closePromo();
+              } else {
+                setPromoHeight('small');
+              }
+            }} 
+          />
+          
+          {/* Promo Form Bottom Sheet */}
+          <div 
+            className={`fixed bottom-0 left-1/2 -translate-x-1/2 z-[120] w-full max-w-[420px] bg-[#1c1c1e] flex flex-col rounded-t-[32px] border-t border-white/10 shadow-2xl transition-all duration-300 ease-out ${
+              isPromoAnimating ? 'animate-[slideUpFromBottom_0.3s_ease-out]' : ''
+            } ${
+              promoHeight === 'full' ? 'h-[95vh]' : 'h-[70vh]'
+            }`}
+            onClick={(e) => e.stopPropagation()}
+            style={{ 
+              willChange: isPromoAnimating ? 'transform' : 'height'
+            }}
+          >
+            {/* Drag Handle & Header */}
+            <div className="flex-shrink-0 px-4 pt-3 pb-2">
+              <div 
+                className="w-12 h-1.5 bg-white/20 rounded-full mx-auto mb-3 cursor-ns-resize"
+                onClick={() => setPromoHeight(promoHeight === 'full' ? 'small' : 'full')}
+              />
+              
+              <div className="flex items-center justify-between mb-2">
+                <button
+                  onClick={closePromo}
+                  className="w-8 h-8 rounded-full bg-[#252527] border border-white/5 flex items-center justify-center active:scale-90 transition-all text-white hover:bg-[#2c2c2e]"
+                >
+                  <X size={16} />
+                </button>
+                <div className="text-lg font-bold flex items-center gap-2 text-[#0098EA]">
+                  <Gift size={20} />
+                  Промокод
                 </div>
-
-                <h3 className="text-2xl font-bold text-white mb-2">Промокод</h3>
-                <p className="text-gray-400 text-sm mb-6 leading-relaxed">
-                   Введите код, чтобы получить<br/>бонус на торговый счет.
-                </p>
-
-                {promoStatus === 'success' ? (
-                     <div className="w-full py-8 flex flex-col items-center animate-[fadeIn_0.5s_ease-out]">
-                        <CheckCircle2 size={48} className="text-[#00C896] mb-3" />
-                        <span className="text-3xl font-bold text-white mb-1">{promoMessage}</span>
-                        <span className="text-sm text-gray-500">Успешно начислено!</span>
-                     </div>
-                ) : (
-                    <div className="w-full space-y-4">
-                        <div>
-                            <input 
-                                type="text" 
-                                value={promoCode}
-                                onChange={(e) => setPromoCode(e.target.value)}
-                                placeholder="ENTER CODE"
-                                className="w-full bg-[#111113] border border-gray-700 rounded-xl px-4 py-3.5 text-center text-lg font-bold text-white tracking-widest placeholder-gray-600 focus:border-[#0098EA] outline-none transition-colors uppercase"
-                            />
-                            {promoStatus === 'error' && (
-                                <p className="text-[#FF3B30] text-xs font-bold mt-2 animate-pulse">{promoMessage}</p>
-                            )}
-                        </div>
-
-                        <button 
-                            onClick={handleActivatePromo}
-                            disabled={promoStatus === 'loading' || !promoCode}
-                            className={`w-full font-bold py-3.5 rounded-xl flex items-center justify-center gap-2 transition-all active:scale-95 ${promoCode ? 'bg-white text-black hover:bg-gray-200' : 'bg-gray-800 text-gray-500 cursor-not-allowed'}`}
-                        >
-                            {promoStatus === 'loading' ? <Loader2 size={20} className="animate-spin" /> : 'АКТИВИРОВАТЬ'}
-                        </button>
-                    </div>
-                )}
+                <button
+                  onClick={() => setPromoHeight(promoHeight === 'full' ? 'small' : 'full')}
+                  className="w-8 h-8 rounded-full bg-[#252527] border border-white/5 flex items-center justify-center active:scale-90 transition-all text-white hover:bg-[#2c2c2e]"
+                >
+                  {promoHeight === 'full' ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
+                </button>
+              </div>
             </div>
-        </div>
+
+            {/* Content */}
+            <div className="flex-1 overflow-y-auto px-4 pb-4 pt-2 flex flex-col items-center justify-center" style={{ WebkitOverflowScrolling: 'touch' }}>
+              {promoStatus === 'success' ? (
+                <div className="w-full py-8 flex flex-col items-center animate-[fadeIn_0.5s_ease-out]">
+                  <div className="w-20 h-20 rounded-full bg-gradient-to-tr from-[#0098EA] to-[#00C896] flex items-center justify-center mb-4 shadow-[0_0_30px_rgba(0,152,234,0.5)]">
+                    <CheckCircle2 size={48} className="text-white" />
+                  </div>
+                  <span className="text-4xl font-bold text-white mb-2 bg-gradient-to-r from-[#0098EA] to-[#00C896] bg-clip-text text-transparent">
+                    {promoMessage}
+                  </span>
+                  <span className="text-sm text-gray-400">Успешно начислено на ваш счет!</span>
+                  <button
+                    onClick={closePromo}
+                    className="mt-6 w-full bg-[#0098EA] text-white font-bold py-3 rounded-xl active:scale-95 transition-all"
+                  >
+                    Отлично!
+                  </button>
+                </div>
+              ) : (
+                <div className="w-full space-y-6">
+                  {/* Icon */}
+                  <div className="flex justify-center">
+                    <div className="w-20 h-20 rounded-full bg-gradient-to-tr from-[#0098EA] to-[#00C896] flex items-center justify-center shadow-[0_0_30px_rgba(0,152,234,0.5)]">
+                      <Gift size={40} className="text-white" />
+                    </div>
+                  </div>
+
+                  {/* Title & Description */}
+                  <div className="text-center">
+                    <h3 className="text-2xl font-bold text-white mb-2">Активация промокода</h3>
+                    <p className="text-gray-400 text-sm leading-relaxed">
+                      Введите код, чтобы получить<br/>бонус на торговый счет
+                    </p>
+                  </div>
+
+                  {/* Input */}
+                  <div>
+                    <input 
+                      type="text" 
+                      value={promoCode}
+                      onChange={(e) => setPromoCode(e.target.value.toUpperCase())}
+                      placeholder="ВВЕДИТЕ КОД"
+                      className="w-full bg-[#111113] border-2 border-white/10 rounded-xl px-4 py-4 text-center text-xl font-bold text-white tracking-widest placeholder-gray-500 focus:border-[#0098EA] outline-none transition-colors uppercase"
+                      autoFocus
+                    />
+                    {promoStatus === 'error' && (
+                      <p className="text-[#FF3B30] text-sm font-semibold mt-3 text-center animate-pulse">
+                        {promoMessage}
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Submit Button */}
+                  <button 
+                    onClick={handleActivatePromo}
+                    disabled={promoStatus === 'loading' || !promoCode.trim()}
+                    className={`w-full font-bold py-4 rounded-xl flex items-center justify-center gap-2 transition-all active:scale-95 text-lg ${
+                      promoCode.trim() && promoStatus !== 'loading'
+                        ? 'bg-gradient-to-r from-[#0098EA] to-[#00C896] text-white shadow-lg shadow-[#0098EA]/40 hover:from-[#0088D1] hover:to-[#00B886]' 
+                        : 'bg-[#1c1c1e] text-gray-500 cursor-not-allowed border border-white/5'
+                    }`}
+                  >
+                    {promoStatus === 'loading' ? (
+                      <>
+                        <Loader2 size={20} className="animate-spin" />
+                        Активация...
+                      </>
+                    ) : (
+                      'АКТИВИРОВАТЬ'
+                    )}
+                  </button>
+
+                  {/* Info */}
+                  <div className="text-center pt-4">
+                    <p className="text-xs text-gray-500">
+                      Промокод можно использовать только один раз
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </>
       )}
 
     </div>

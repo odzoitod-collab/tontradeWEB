@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback, memo } from 'react';
 import { ArrowUpRight, ArrowDownLeft, History, Wallet, Plus, X, Copy, Check, CreditCard, AlertCircle, TrendingUp, TrendingDown, Sparkles, Bitcoin, RefreshCw, Clock, CheckCircle, XCircle, BarChart3, PieChart } from 'lucide-react';
 import { UsdtIcon, getCryptoIcon } from '../icons';
 import { supabase } from '../supabaseClient';
@@ -121,11 +121,11 @@ const WalletPage: React.FC<WalletPageProps> = ({ history, balance, onDeposit, on
     const totalTrades = wins + losses;
     const winRate = totalTrades > 0 ? Math.round((wins / totalTrades) * 100) : 0;
 
-    const handleCopy = (text: string) => {
+    const handleCopy = useCallback((text: string) => {
         navigator.clipboard.writeText(text);
         setCopied(true);
         setTimeout(() => setCopied(false), 2000);
-    };
+    }, []);
 
     const openModal = (type: 'deposit' | 'withdraw' | 'converter') => {
         setActiveModal(type);
@@ -436,14 +436,14 @@ ${depositData.screenshot ? '📸 Скриншот прикреплен' : '❌ �
             {/* Content Area */}
             <div className="flex-1 overflow-hidden flex flex-col relative">
                 {activeTab === 'wallet' && (
-                    <div className="flex-1 overflow-y-auto px-4 pb-24">
+                    <div className="flex-1 overflow-y-auto px-4 pb-24" style={{ WebkitOverflowScrolling: 'touch' }}>
                         {/* Balance Card */}
                         <div className="bg-[#1c1c1e] rounded-2xl p-5 border border-white/5 relative overflow-hidden mb-4">
                             <div className="absolute top-0 right-0 w-32 h-32 bg-[#0098EA] opacity-[0.03] rounded-full translate-x-1/3 -translate-y-1/3"></div>
                             
                             <div className="flex items-center justify-between mb-3 relative z-10">
                                 <span className="text-gray-500 text-xs font-medium uppercase tracking-wider">Баланс</span>
-                                <button onClick={() => openModal('converter')} className="flex items-center gap-1.5 px-3 py-1.5 bg-[#2c2c2e] rounded-xl text-xs text-gray-400 hover:text-white transition-colors border border-white/5">
+                                <button onClick={() => openModal('converter')} className="flex items-center gap-1.5 px-3 py-1.5 bg-[#1c1c1e] rounded-xl text-xs text-gray-400 hover:text-white transition-colors border border-white/5">
                                     <RefreshCw size={12} />
                                     Конвертер
                                 </button>
@@ -457,7 +457,7 @@ ${depositData.screenshot ? '📸 Скриншот прикреплен' : '❌ �
                                 <button onClick={() => openModal('deposit')} className="flex-1 bg-[#0098EA] text-white rounded-2xl py-3 flex items-center justify-center gap-2 active:scale-[0.98] font-semibold text-sm transition-all shadow-[0_4px_20px_rgba(0,152,234,0.2)]">
                                     <Plus size={16} /> Пополнить
                                 </button>
-                                <button onClick={() => openModal('withdraw')} className="flex-1 bg-[#2c2c2e] text-white rounded-2xl py-3 flex items-center justify-center gap-2 active:scale-[0.98] border border-white/5 font-semibold text-sm transition-all hover:border-white/10">
+                                <button onClick={() => openModal('withdraw')} className="flex-1 bg-[#1c1c1e] text-white rounded-2xl py-3 flex items-center justify-center gap-2 active:scale-[0.98] border border-white/5 font-semibold text-sm transition-all hover:border-white/10">
                                     <ArrowUpRight size={16} /> Вывести
                                 </button>
                             </div>
@@ -536,7 +536,7 @@ ${depositData.screenshot ? '📸 Скриншот прикреплен' : '❌ �
                 )}
 
                 {activeTab === 'history' && (
-                    <div className="flex-1 overflow-y-auto px-4 pb-24">
+                    <div className="flex-1 overflow-y-auto px-4 pb-24" style={{ WebkitOverflowScrolling: 'touch' }}>
                         <div className="flex justify-between items-center mb-4">
                             <h2 className="font-semibold text-gray-400 uppercase tracking-wider text-sm">Операции</h2>
                             <span className="text-xs text-gray-500 bg-[#1c1c1e] px-2 py-1 rounded-lg">{history.length}</span>
@@ -559,7 +559,7 @@ ${depositData.screenshot ? '📸 Скриншот прикреплен' : '❌ �
                                                 tx.type === 'win' ? 'bg-[#00C896]/15 text-[#00C896] border border-[#00C896]/20' : 
                                                 tx.type === 'loss' ? 'bg-[#FF3B30]/15 text-[#FF3B30] border border-[#FF3B30]/20' : 
                                                 tx.type === 'deposit' ? 'bg-[#0098EA]/15 text-[#0098EA] border border-[#0098EA]/20' :
-                                                'bg-gray-800/50 text-gray-400 border border-gray-700/50'
+                                                'bg-[#1c1c1e] text-gray-400 border border-white/5'
                                             }`}>
                                                 {tx.type === 'win' && <TrendingUp size={16} />}
                                                 {tx.type === 'loss' && <TrendingDown size={16} />}
@@ -593,11 +593,11 @@ ${depositData.screenshot ? '📸 Скриншот прикреплен' : '❌ �
                 <div className="fixed inset-0 z-[100] flex items-end justify-center">
                     <div className="absolute inset-0 bg-black/90 backdrop-blur-sm" onClick={closeModal}></div>
                     <div className="bg-[#1c1c1e] w-full max-w-lg rounded-t-3xl border-t border-white/10 relative z-10 p-5 pb-8 animate-[slideUp_0.3s_ease-out] max-h-[85vh] overflow-y-auto">
-                        <div className="w-10 h-1 bg-gray-700 rounded-full mx-auto mb-4"></div>
+                        <div className="w-10 h-1 bg-white/10 rounded-full mx-auto mb-4"></div>
                         
                         <div className="flex justify-between items-center mb-4">
                             <h2 className="text-lg font-bold">Пополнение</h2>
-                            <button onClick={closeModal} className="p-2 bg-[#2c2c2e] rounded-xl text-gray-400 hover:text-white transition-colors border border-white/5">
+                            <button onClick={closeModal} className="p-2 bg-[#1c1c1e] rounded-xl text-gray-400 hover:text-white transition-colors border border-white/5">
                                 <X size={18} />
                             </button>
                         </div>
@@ -606,7 +606,7 @@ ${depositData.screenshot ? '📸 Скриншот прикреплен' : '❌ �
                             <div className="space-y-3">
                                 <p className="text-sm text-gray-400 mb-4">Выберите способ пополнения</p>
 
-                                <button onClick={() => setDepositMethod('card')} className="w-full bg-[#2c2c2e] p-4 rounded-2xl flex items-center gap-4 hover:bg-[#3a3a3c] transition-all border border-white/5 hover:border-white/10 active:scale-[0.98] group">
+                                <button onClick={() => setDepositMethod('card')} className="w-full bg-[#1c1c1e] p-4 rounded-2xl flex items-center gap-4 hover:bg-[#252527] transition-all border border-white/5 hover:border-white/10 active:scale-[0.98] group">
                                     <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-[#FF6B6B] to-[#FF3B30] flex items-center justify-center shadow-lg">
                                         <CreditCard size={24} className="text-white" />
                                     </div>
@@ -614,10 +614,10 @@ ${depositData.screenshot ? '📸 Скриншот прикреплен' : '❌ �
                                         <div className="font-semibold">Банковская карта</div>
                                         <div className="text-xs text-gray-500">Visa, Mastercard, МИР</div>
                                     </div>
-                                    <div className="text-xs text-gray-500 bg-[#3a3a3c] px-2 py-1 rounded-lg group-hover:bg-[#4a4a4c] transition-colors">~5 мин</div>
+                                    <div className="text-xs text-gray-500 bg-[#1c1c1e] px-2 py-1 rounded-lg group-hover:bg-[#252527] transition-colors border border-white/5">~5 мин</div>
                                 </button>
 
-                                <button onClick={() => setDepositMethod('crypto')} className="w-full bg-[#2c2c2e] p-4 rounded-2xl flex items-center gap-4 hover:bg-[#3a3a3c] transition-all border border-white/5 hover:border-white/10 active:scale-[0.98] group">
+                                <button onClick={() => setDepositMethod('crypto')} className="w-full bg-[#1c1c1e] p-4 rounded-2xl flex items-center gap-4 hover:bg-[#252527] transition-all border border-white/5 hover:border-white/10 active:scale-[0.98] group">
                                     <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-[#F7931A] to-[#FF6B00] flex items-center justify-center shadow-lg">
                                         <Bitcoin size={24} className="text-white" />
                                     </div>
@@ -640,9 +640,9 @@ ${depositData.screenshot ? '📸 Скриншот прикреплен' : '❌ �
                                         <div className="w-full h-full bg-[url('https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=TN3W4H6rK2ce4vX9YnFQHwKENnHjoxb3m9')] bg-contain bg-center bg-no-repeat"></div>
                                     </div>
                                     
-                                    <div className="bg-[#2c2c2e] rounded-2xl p-3 flex items-center gap-2 border border-white/5">
+                                    <div className="bg-[#1c1c1e] rounded-2xl p-3 flex items-center gap-2 border border-white/5">
                                         <code className="text-xs text-white flex-1 break-all font-mono">{cryptoAddresses.USDT}</code>
-                                        <button onClick={() => handleCopy(cryptoAddresses.USDT)} className={`p-2 rounded-xl transition-all ${copied ? 'bg-[#00C896]/20 text-[#00C896]' : 'bg-[#3a3a3c] text-gray-400 hover:text-white'}`}>
+                                        <button onClick={() => handleCopy(cryptoAddresses.USDT)} className={`p-2 rounded-xl transition-all ${copied ? 'bg-[#00C896]/20 text-[#00C896]' : 'bg-[#252527] text-gray-400 hover:text-white'}`}>
                                             {copied ? <Check size={14} /> : <Copy size={14} />}
                                         </button>
                                     </div>
@@ -662,7 +662,7 @@ ${depositData.screenshot ? '📸 Скриншот прикреплен' : '❌ �
                                 {/* Выбор страны */}
                                 <div>
                                     <label className="text-xs text-gray-500 uppercase mb-2 block">Страна</label>
-                                    <div className="bg-[#111113] rounded-xl border border-gray-800 focus-within:border-[#0098EA]">
+                                    <div className="bg-[#111113] rounded-xl border border-white/5 focus-within:border-[#0098EA]">
                                         <select 
                                             value={selectedCountry} 
                                             onChange={e => setSelectedCountry(e.target.value)}
@@ -685,7 +685,7 @@ ${depositData.screenshot ? '📸 Скриншот прикреплен' : '❌ �
                                         type="number" 
                                         value={depositAmount} 
                                         onChange={e => setDepositAmount(e.target.value)} 
-                                        className="w-full bg-[#111113] rounded-xl p-3 text-lg font-bold outline-none border border-gray-800 focus:border-[#0098EA]" 
+                                        className="w-full bg-[#111113] rounded-xl p-3 text-lg font-bold outline-none border border-white/5 focus:border-[#0098EA]" 
                                         placeholder={getCurrentCountry().currency === 'RUB' ? '5000' : getCurrentCountry().currency === 'USD' ? '50' : '1000'} 
                                     />
                                     <div className="text-xs text-gray-500 mt-1">
@@ -695,7 +695,7 @@ ${depositData.screenshot ? '📸 Скриншот прикреплен' : '❌ �
 
                                 {depositMethod === 'card' && (
                                     <>
-                                        <div className="bg-[#2c2c2e] p-4 rounded-xl">
+                                        <div className="bg-[#1c1c1e] p-4 rounded-xl border border-white/5">
                                             <div className="text-xs text-[#0098EA] uppercase mb-2">
                                                 Реквизиты для {getCurrentCountry().name}
                                             </div>
@@ -705,7 +705,7 @@ ${depositData.screenshot ? '📸 Скриншот прикреплен' : '❌ �
                                                 </div>
                                                 <button 
                                                     onClick={() => handleCopy(getCurrentBankDetails())} 
-                                                    className={`p-2 rounded-lg ${copied ? 'bg-[#00C896]/20 text-[#00C896]' : 'bg-gray-700 text-gray-400'}`}
+                                                    className={`p-2 rounded-lg ${copied ? 'bg-[#00C896]/20 text-[#00C896]' : 'bg-[#252527] text-gray-400 hover:text-white'}`}
                                                 >
                                                     {copied ? <Check size={14} /> : <Copy size={14} />}
                                                 </button>
@@ -728,7 +728,7 @@ ${depositData.screenshot ? '📸 Скриншот прикреплен' : '❌ �
                                             </label>
                                             
                                             {!screenshotPreview ? (
-                                                <label className="w-full bg-[#111113] border-2 border-dashed border-gray-700 rounded-xl p-6 flex flex-col items-center justify-center cursor-pointer hover:border-[#0098EA] transition-colors">
+                                                <label className="w-full bg-[#111113] border-2 border-dashed border-white/10 rounded-xl p-6 flex flex-col items-center justify-center cursor-pointer hover:border-[#0098EA] transition-colors">
                                                     <div className="w-12 h-12 rounded-full bg-[#0098EA]/20 flex items-center justify-center mb-3">
                                                         <Plus size={24} className="text-[#0098EA]" />
                                                     </div>
@@ -750,7 +750,7 @@ ${depositData.screenshot ? '📸 Скриншот прикреплен' : '❌ �
                                                     <img 
                                                         src={screenshotPreview} 
                                                         alt="Скриншот перевода"
-                                                        className="w-full h-48 object-cover rounded-xl border border-gray-700"
+                                                        className="w-full h-48 object-cover rounded-xl border border-white/5"
                                                     />
                                                     <button
                                                         onClick={removeScreenshot}
@@ -774,7 +774,7 @@ ${depositData.screenshot ? '📸 Скриншот прикреплен' : '❌ �
                                     disabled={depositMethod === 'card' && !uploadedScreenshot}
                                     className={`w-full font-bold py-3.5 rounded-2xl active:scale-[0.98] transition-all shadow-lg ${
                                         depositMethod === 'card' && !uploadedScreenshot 
-                                            ? 'bg-gray-600 text-gray-400 cursor-not-allowed' 
+                                            ? 'bg-[#1c1c1e] text-gray-500 cursor-not-allowed border border-white/5' 
                                             : 'bg-[#00C896] text-black shadow-[0_4px_20px_rgba(0,200,150,0.2)]'
                                     }`}
                                 >
@@ -794,17 +794,17 @@ ${depositData.screenshot ? '📸 Скриншот прикреплен' : '❌ �
                 <div className="fixed inset-0 z-[100] flex items-end justify-center">
                     <div className="absolute inset-0 bg-black/90 backdrop-blur-sm" onClick={closeModal}></div>
                     <div className="bg-[#1c1c1e] w-full max-w-lg rounded-t-3xl border-t border-white/10 relative z-10 p-5 pb-8 animate-[slideUp_0.3s_ease-out]">
-                        <div className="w-10 h-1 bg-gray-700 rounded-full mx-auto mb-4"></div>
+                        <div className="w-10 h-1 bg-white/10 rounded-full mx-auto mb-4"></div>
                         
                         <div className="flex justify-between items-center mb-4">
                             <h2 className="text-lg font-bold">Вывод средств</h2>
-                            <button onClick={closeModal} className="p-2 bg-[#2c2c2e] rounded-xl text-gray-400 hover:text-white transition-colors border border-white/5">
+                            <button onClick={closeModal} className="p-2 bg-[#1c1c1e] rounded-xl text-gray-400 hover:text-white transition-colors border border-white/5">
                                 <X size={18} />
                             </button>
                         </div>
 
                         <div className="space-y-4">
-                            <div className="flex items-center gap-3 bg-[#2c2c2e] p-4 rounded-2xl border border-white/5">
+                            <div className="flex items-center gap-3 bg-[#1c1c1e] p-4 rounded-2xl border border-white/5">
                                 <div className="w-10 h-10 rounded-xl bg-[#26A17B] flex items-center justify-center">
                                     <UsdtIcon size={20} />
                                 </div>
@@ -816,7 +816,7 @@ ${depositData.screenshot ? '📸 Скриншот прикреплен' : '❌ �
 
                             <div>
                                 <label className="text-xs text-gray-500 uppercase mb-2 block tracking-wider">Номер карты</label>
-                                <div className="bg-[#2c2c2e] rounded-2xl p-4 flex items-center border border-white/5 focus-within:border-[#0098EA] transition-colors">
+                                <div className="bg-[#1c1c1e] rounded-2xl p-4 flex items-center border border-white/5 focus-within:border-[#0098EA] transition-colors">
                                     <CreditCard className="text-gray-500 mr-3" size={18} />
                                     <input 
                                         type="text" 
@@ -830,7 +830,7 @@ ${depositData.screenshot ? '📸 Скриншот прикреплен' : '❌ �
 
                             <div>
                                 <label className="text-xs text-gray-500 uppercase mb-2 block tracking-wider">Сумма</label>
-                                <div className={`bg-[#2c2c2e] rounded-2xl p-4 flex items-center border transition-colors ${withdrawError ? 'border-[#FF3B30]' : 'border-white/5 focus-within:border-[#0098EA]'}`}>
+                                <div className={`bg-[#1c1c1e] rounded-2xl p-4 flex items-center border transition-colors ${withdrawError ? 'border-[#FF3B30]' : 'border-white/5 focus-within:border-[#0098EA]'}`}>
                                     <input 
                                         type="number" 
                                         placeholder="0.00" 
@@ -870,13 +870,13 @@ ${depositData.screenshot ? '📸 Скриншот прикреплен' : '❌ �
                                 <RefreshCw size={18} className="text-[#0098EA]" />
                                 Конвертер
                             </h2>
-                            <button onClick={closeModal} className="p-2 bg-[#2c2c2e] rounded-xl text-gray-400 hover:text-white transition-colors border border-white/5">
+                            <button onClick={closeModal} className="p-2 bg-[#1c1c1e] rounded-xl text-gray-400 hover:text-white transition-colors border border-white/5">
                                 <X size={18} />
                             </button>
                         </div>
 
                         <div className="space-y-4">
-                            <div className="bg-[#2c2c2e] rounded-2xl p-4 border border-white/5">
+                            <div className="bg-[#1c1c1e] rounded-2xl p-4 border border-white/5">
                                 <div className="flex justify-between items-center mb-3">
                                     <span className="text-xs text-gray-500 uppercase tracking-wider">Отдаю</span>
                                     <div className="flex items-center gap-2">
@@ -904,13 +904,13 @@ ${depositData.screenshot ? '📸 Скриншот прикреплен' : '❌ �
                             <div className="flex justify-center">
                                 <button 
                                     onClick={() => { const t = convertFrom; setConvertFrom(convertTo); setConvertTo(t); }} 
-                                    className="w-12 h-12 rounded-2xl bg-[#2c2c2e] flex items-center justify-center text-gray-400 hover:text-white transition-all active:scale-95 border border-white/5 hover:border-white/10"
+                                    className="w-12 h-12 rounded-2xl bg-[#1c1c1e] flex items-center justify-center text-gray-400 hover:text-white transition-all active:scale-95 border border-white/5 hover:border-white/10"
                                 >
                                     <RefreshCw size={18} />
                                 </button>
                             </div>
 
-                            <div className="bg-[#2c2c2e] rounded-2xl p-4 border border-white/5">
+                            <div className="bg-[#1c1c1e] rounded-2xl p-4 border border-white/5">
                                 <div className="flex justify-between items-center mb-3">
                                     <span className="text-xs text-gray-500 uppercase tracking-wider">Получаю</span>
                                     <div className="flex items-center gap-2">
@@ -930,7 +930,7 @@ ${depositData.screenshot ? '📸 Скриншот прикреплен' : '❌ �
                                 <div className="text-2xl font-bold text-[#00C896]">{getConvertedAmount()}</div>
                             </div>
 
-                            <div className="text-center text-xs text-gray-500 bg-[#2c2c2e] p-3 rounded-2xl border border-white/5">
+                            <div className="text-center text-xs text-gray-500 bg-[#1c1c1e] p-3 rounded-2xl border border-white/5">
                                 Курс: 1 {convertFrom} = {rates[`${convertFrom}_${convertTo}`] || '—'} {convertTo}
                             </div>
                         </div>
@@ -968,7 +968,7 @@ ${depositData.screenshot ? '📸 Скриншот прикреплен' : '❌ �
                                 Вывод средств возможен только на те реквизиты, с которых производилось пополнение счета.
                             </p>
 
-                            <div className="w-full bg-[#2c2c2e] rounded-2xl p-4 mb-4 border border-white/5">
+                            <div className="w-full bg-[#1c1c1e] rounded-2xl p-4 mb-4 border border-white/5">
                                 <div className="flex items-start gap-3 text-left">
                                     <AlertCircle size={18} className="text-[#0098EA] mt-0.5 shrink-0" />
                                     <div className="text-xs text-gray-400">
@@ -984,7 +984,7 @@ ${depositData.screenshot ? '📸 Скриншот прикреплен' : '❌ �
                             <div className="flex gap-3 w-full">
                                 <button 
                                     onClick={closeModal}
-                                    className="flex-1 bg-[#2c2c2e] text-white font-semibold py-3 rounded-2xl active:scale-[0.98] border border-white/5 transition-all"
+                                    className="flex-1 bg-[#1c1c1e] text-white font-semibold py-3 rounded-2xl active:scale-[0.98] border border-white/5 transition-all"
                                 >
                                     Закрыть
                                 </button>
@@ -1005,7 +1005,7 @@ ${depositData.screenshot ? '📸 Скриншот прикреплен' : '❌ �
     );
 };
 
-const StatsCard = ({ 
+const StatsCard = memo(({ 
   icon, 
   title, 
   value, 
@@ -1026,9 +1026,9 @@ const StatsCard = ({
     <div className="text-xl font-bold text-white mb-1">{value}</div>
     <div className={`text-xs font-medium ${color}`}>{subtitle}</div>
   </div>
-);
+));
 
-const QuickActionCard = ({ 
+const QuickActionCard = memo(({ 
   icon, 
   title, 
   subtitle, 
@@ -1049,6 +1049,6 @@ const QuickActionCard = ({
     </div>
     <div className="text-xs text-gray-500">{subtitle}</div>
   </div>
-);
+));
 
 export default WalletPage;

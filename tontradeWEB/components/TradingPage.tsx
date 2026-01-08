@@ -1,5 +1,5 @@
-import React, { useState, useMemo, useEffect } from 'react';
-import { Search, X, TrendingUp, TrendingDown, ChevronLeft, Minus, Plus, Clock, Zap, AlertTriangle, Star, BarChart3, ArrowLeft, Wallet, History } from 'lucide-react';
+import React, { useState, useMemo, useEffect, useCallback, memo } from 'react';
+import { Search, X, TrendingUp, TrendingDown, ChevronLeft, Minus, Plus, Clock, Zap, AlertTriangle, Star, BarChart3, ArrowLeft, Wallet, History, Maximize2, Minimize2 } from 'lucide-react';
 import { getCryptoIcon } from '../icons';
 import type { ActiveDeal, CryptoPair } from '../types';
 
@@ -82,7 +82,7 @@ const TIME_OPTIONS = [
   { label: '5м', value: 300 },
 ];
 
-const CryptoIcon = ({ symbol, size = 44 }: { symbol: string; size?: number }) => {
+const CryptoIcon = memo(({ symbol, size = 44 }: { symbol: string; size?: number }) => {
   const getSpecialIcon = (symbol: string) => {
     const iconStyle = { width: size, height: size };
     const imgStyle = { objectFit: 'cover' as const, width: '100%', height: '100%' };
@@ -154,7 +154,7 @@ const CryptoIcon = ({ symbol, size = 44 }: { symbol: string; size?: number }) =>
       {getCryptoIcon(symbol, size)}
     </div>
   );
-};
+});
 
 // --- Main Component ---
 const TradingPage: React.FC<TradingPageProps> = ({ activeDeals, onCreateDeal, balance, userLuck, onNavigationChange }) => {
@@ -175,9 +175,15 @@ const TradingPage: React.FC<TradingPageProps> = ({ activeDeals, onCreateDeal, ba
   const [lastScrollY, setLastScrollY] = useState(0);
   const [chartType, setChartType] = useState<'1' | '2'>('1');
   const [dynamicPrices, setDynamicPrices] = useState<Record<string, { price: string; change: string; isPositive: boolean }>>({});
+  const [chartModalHeight, setChartModalHeight] = useState<'medium' | 'large'>('medium'); // medium = 70%, large = 80%
+  const [orderFormHeight, setOrderFormHeight] = useState<'small' | 'full'>('small'); // small = как график, full = почти весь экран
+  const [touchStartY, setTouchStartY] = useState<number | null>(null);
+  const [touchCurrentY, setTouchCurrentY] = useState<number | null>(null);
+  const [isOrderFormAnimating, setIsOrderFormAnimating] = useState(false);
 
   useEffect(() => {
-    const timer = setInterval(() => setCurrentTime(Date.now()), 100);
+    // Оптимизировано: обновление каждые 500ms вместо 100ms для лучшей производительности
+    const timer = setInterval(() => setCurrentTime(Date.now()), 500);
     return () => clearInterval(timer);
   }, []);
 
@@ -189,16 +195,22 @@ const TradingPage: React.FC<TradingPageProps> = ({ activeDeals, onCreateDeal, ba
   }, [selectedPair]);
 
   useEffect(() => {
+    if (activeDeals.length === 0) return;
+    
+    // Оптимизировано: обновление цен только для активных сделок
     const priceUpdateTimer = setInterval(() => {
       activeDeals.forEach(deal => {
-        const currentPrice = getSimulatedPrice(deal);
-        setPreviousPrices(prev => ({ ...prev, [deal.id]: currentPrice }));
+        if (!deal.processed) {
+          const currentPrice = getSimulatedPrice(deal);
+          setPreviousPrices(prev => ({ ...prev, [deal.id]: currentPrice }));
+        }
       });
     }, 3000);
     return () => clearInterval(priceUpdateTimer);
-  }, [activeDeals]);
+  }, [activeDeals, currentTime, userLuck]);
 
   useEffect(() => {
+    // Оптимизировано: обновление цен реже и только когда нужно
     const updateDisplayPrices = () => {
       const newPrices: Record<string, { price: string; change: string; isPositive: boolean }> = {};
       PAIRS.forEach(pair => {
@@ -216,23 +228,28 @@ const TradingPage: React.FC<TradingPageProps> = ({ activeDeals, onCreateDeal, ba
       });
       setDynamicPrices(newPrices);
     };
+    
+    // Увеличено минимальное время обновления до 3-5 секунд
     const updatePrices = () => {
       updateDisplayPrices();
-      const nextUpdate = 2000 + Math.random() * 2000;
+      const nextUpdate = 3000 + Math.random() * 2000;
       setTimeout(updatePrices, nextUpdate);
     };
+    
     updateDisplayPrices();
-    updatePrices();
+    const timeoutId = setTimeout(updatePrices, 3000);
+    
+    return () => clearTimeout(timeoutId);
   }, []);
 
   useEffect(() => { if (errorMsg) setErrorMsg(null); }, [amount]);
 
-  const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
+  const handleScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
     const currentScrollY = e.currentTarget.scrollTop;
     if (currentScrollY > lastScrollY && currentScrollY > 50) setIsCategoryPanelVisible(false);
     else if (currentScrollY < lastScrollY) setIsCategoryPanelVisible(true);
     setLastScrollY(currentScrollY);
-  };
+  }, [lastScrollY]);
 
   const filteredPairs = useMemo(() => {
     return PAIRS.filter(pair => {
@@ -255,19 +272,57 @@ const TradingPage: React.FC<TradingPageProps> = ({ activeDeals, onCreateDeal, ba
     });
   }, [activeCategory, activeFilter, searchQuery]);
 
-  const handleSelectPair = (pair: CryptoPair) => {
+  const handleSelectPair = useCallback((pair: CryptoPair) => {
     setSelectedPair(pair);
-    setShowOrderForm(false); // Принудительно скрываем форму заказа
+    setShowOrderForm(false);
     setTimeIndex(2);
     setAmount('100');
     setErrorMsg(null);
-    onNavigationChange?.(true); // Скрываем навигацию
-  };
+    onNavigationChange?.(true);
+  }, [onNavigationChange]);
 
-  const handleShowOrderForm = (side: 'Long' | 'Short') => {
+  const handleShowOrderForm = useCallback((side: 'Long' | 'Short') => {
     setOrderSide(side);
+    setOrderFormHeight('small'); // Начинаем с маленького размера
+    setIsOrderFormAnimating(true);
     setShowOrderForm(true);
-  };
+    // Сбрасываем флаг анимации после завершения
+    setTimeout(() => setIsOrderFormAnimating(false), 300);
+  }, []);
+
+  // Обработка свайпов для модального окна заказа
+  const handleTouchStart = useCallback((e: React.TouchEvent) => {
+    setTouchStartY(e.touches[0].clientY);
+  }, []);
+
+  const handleTouchMove = useCallback((e: React.TouchEvent) => {
+    if (touchStartY === null) return;
+    setTouchCurrentY(e.touches[0].clientY);
+  }, [touchStartY]);
+
+  const handleTouchEnd = useCallback(() => {
+    if (touchStartY === null || touchCurrentY === null) {
+      setTouchStartY(null);
+      setTouchCurrentY(null);
+      return;
+    }
+
+    const diff = touchStartY - touchCurrentY;
+    const threshold = 50; // Минимальное расстояние для свайпа
+
+    if (diff > threshold) {
+      // Свайп вверх - открываем на весь экран
+      setOrderFormHeight('full');
+    } else if (diff < -threshold) {
+      // Свайп вниз - закрываем или уменьшаем
+      if (orderFormHeight === 'full') {
+        setOrderFormHeight('small');
+      }
+    }
+
+    setTouchStartY(null);
+    setTouchCurrentY(null);
+  }, [touchStartY, touchCurrentY, orderFormHeight]);
 
   const handleOpenDeal = () => {
     if (!selectedPair) return;
@@ -293,6 +348,8 @@ const TradingPage: React.FC<TradingPageProps> = ({ activeDeals, onCreateDeal, ba
     setShowOrderForm(false);
     setViewMode('deals');
     onNavigationChange?.(false); // Показываем навигацию при переходе к сделкам
+    setChartModalHeight('medium'); // Сбрасываем размер модального окна
+    setOrderFormHeight('small'); // Сбрасываем размер формы заказа
   };
 
   const formatTime = (s: number) => s <= 0 ? '0:00' : `${Math.floor(s/60)}:${(s%60).toString().padStart(2,'0')}`;
@@ -336,8 +393,10 @@ const TradingPage: React.FC<TradingPageProps> = ({ activeDeals, onCreateDeal, ba
     return deal.entryPrice * (1 + clampedChange);
   };
 
-  // === RENDER CHART VIEW ===
-  if (selectedPair) {
+  // === RENDER CHART MODAL ===
+  const renderChartModal = () => {
+    if (!selectedPair) return null;
+    
     let tvSymbol = '';
     let showNftImage = false;
     let nftImageUrl = '';
@@ -364,157 +423,256 @@ const TradingPage: React.FC<TradingPageProps> = ({ activeDeals, onCreateDeal, ba
     }
     
     const chartUrl = `https://s.tradingview.com/widgetembed/?symbol=${tvSymbol}&interval=5&hidesidetoolbar=1&hidetoptoolbar=1&symboledit=0&saveimage=0&theme=dark&style=${chartType}&timezone=Etc%2FUTC&withdateranges=0&hide_legend=1&hide_volume=1&backgroundColor=rgba(0,0,0,0)&gridLineColor=rgba(40,40,40,0.3)`;
+    const heightClass = chartModalHeight === 'large' ? 'h-[80vh]' : 'h-[70vh]';
 
     return (
-      <div className="h-full flex flex-col bg-black text-white relative overflow-hidden">
-        {/* Header */}
-        <div className="flex items-center justify-between px-4 pt-4 pb-2 shrink-0 bg-black">
-          <button onClick={() => {
+      <div className="fixed inset-0 z-[100] flex items-end justify-center pointer-events-none">
+        {/* Backdrop */}
+        <div 
+          className="absolute inset-0 bg-black/60 backdrop-blur-sm pointer-events-auto transition-opacity"
+          onClick={() => {
             setSelectedPair(null);
-            onNavigationChange?.(false); // Показываем навигацию
-          }} className="w-10 h-10 rounded-full bg-black/40 backdrop-blur-md border border-white/10 flex items-center justify-center active:scale-90 transition-transform text-white">
-            <ArrowLeft size={20} />
-          </button>
-          <div className="px-4 py-1.5 rounded-full bg-black/40 backdrop-blur-md border border-white/10 flex flex-col items-center">
-             <span className="font-bold text-sm tracking-wide">{selectedPair.name}</span>
-          </div>
-          <div className="w-10" />
-        </div>
-
-
-
-        {/* Chart Area */}
-        <div className={`flex-1 relative transition-all duration-500 ${showOrderForm ? 'scale-95 opacity-50' : 'scale-100 opacity-100'}`}>
-          <div className="absolute inset-0 pb-24 z-10">
-             {showNftImage ? (
-                  <div className="w-full h-full flex items-center justify-center">
-                     <img src={nftImageUrl} className="w-full h-full object-contain p-8 opacity-90" alt="" />
+            setShowOrderForm(false);
+            onNavigationChange?.(false);
+          }}
+        />
+        
+        {/* Modal Sheet */}
+        <div className={`${heightClass} w-full max-w-[420px] bg-[#111113] rounded-t-[32px] border-t border-white/10 relative z-10 pointer-events-auto flex flex-col shadow-2xl animate-[slideUp_0.3s_ease-out]`}>
+          {/* Drag Handle & Header */}
+          <div className="flex-shrink-0 px-4 pt-3 pb-2">
+            <div className="w-12 h-1.5 bg-white/20 rounded-full mx-auto mb-3 cursor-ns-resize" />
+            
+            {/* Header Controls */}
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => {
+                    setSelectedPair(null);
+                    setShowOrderForm(false);
+                    onNavigationChange?.(false);
+                  }}
+                  className="w-8 h-8 rounded-full bg-[#1c1c1e] border border-white/5 flex items-center justify-center active:scale-90 transition-all text-white hover:bg-[#252527]"
+                >
+                  <X size={16} />
+                </button>
+                <div className="flex items-center gap-2">
+                  <CryptoIcon symbol={selectedPair.symbol} size={32} />
+                  <div>
+                    <div className="font-bold text-sm">{selectedPair.name}</div>
+                    <div className="text-xs text-gray-500">{selectedPair.symbol}</div>
                   </div>
-             ) : (
-                <iframe src={chartUrl} className="w-full h-full border-none pointer-events-auto relative z-0" style={{ background: 'transparent' }} title="Chart" />
-             )}
-          </div>
-        </div>
-
-
-
-        {/* Action Buttons (Always Visible at Bottom) */}
-        {!showOrderForm && (
-          <div className="absolute bottom-0 left-0 right-0 p-5 z-50 bg-gradient-to-t from-black/90 via-black/60 to-transparent pb-safe">
-            <div className="flex gap-4">
-              <button 
-                onClick={() => handleShowOrderForm('Long')} 
-                className="flex-1 h-14 bg-[#00C896] text-black text-lg font-bold rounded-2xl flex items-center justify-center gap-2 active:scale-95 transition-all shadow-[0_0_20px_rgba(0,200,150,0.3)]"
+                </div>
+              </div>
+              
+              {/* Size Toggle */}
+              <button
+                onClick={() => setChartModalHeight(chartModalHeight === 'large' ? 'medium' : 'large')}
+                className="w-8 h-8 rounded-full bg-[#1c1c1e] border border-white/5 flex items-center justify-center active:scale-90 transition-all text-white hover:bg-[#252527]"
               >
-                <TrendingUp size={24} strokeWidth={3} /> Вверх
-              </button>
-              <button 
-                onClick={() => handleShowOrderForm('Short')} 
-                className="flex-1 h-14 bg-[#FF3B30] text-white text-lg font-bold rounded-2xl flex items-center justify-center gap-2 active:scale-95 transition-all shadow-[0_0_20px_rgba(255,59,48,0.3)]"
-              >
-                <TrendingDown size={24} strokeWidth={3} /> Вниз
+                {chartModalHeight === 'large' ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
               </button>
             </div>
           </div>
-        )}
 
-        {/* Order Form (Modern Bottom Sheet) */}
-        {showOrderForm && (
-            <>
-                <div className="absolute inset-0 bg-black/60 backdrop-blur-sm z-40 transition-opacity" onClick={() => setShowOrderForm(false)} />
-                <div className="absolute bottom-0 left-0 right-0 z-50 bg-[#141414] rounded-t-[32px] border-t border-white/10 pb-safe animate-in slide-in-from-bottom duration-300">
-                    <div className="w-12 h-1.5 bg-gray-700 rounded-full mx-auto mt-3 mb-6 opacity-50" />
-                    
-                    <div className="px-6">
-                        {/* Header Info */}
-                        <div className="flex justify-between items-center mb-6">
-                             <div>
-                                 <div className={`text-2xl font-bold flex items-center gap-2 ${orderSide === 'Long' ? 'text-[#00C896]' : 'text-[#FF3B30]'}`}>
-                                     {orderSide === 'Long' ? 'Покупка' : 'Продажа'}
-                                     {orderSide === 'Long' ? <TrendingUp size={24}/> : <TrendingDown size={24}/>}
-                                 </div>
-                                 <div className="text-gray-500 text-sm font-medium mt-1">Баланс: <span className="text-white">${balance.toFixed(2)}</span></div>
-                             </div>
-                             <div className="text-right">
-                                 <div className="text-sm text-gray-400">Плечо</div>
-                                 <div className="text-yellow-400 font-bold text-lg flex items-center gap-1 justify-end"><Zap size={16} fill="currentColor"/> 10x</div>
-                             </div>
-                        </div>
+          {/* Chart Area */}
+          <div className={`flex-1 relative min-h-0 ${showOrderForm ? 'opacity-30' : 'opacity-100'} transition-opacity duration-300`}>
+            {showNftImage ? (
+              <div className="w-full h-full flex items-center justify-center p-4">
+                <img src={nftImageUrl} className="w-full h-full object-contain opacity-90 rounded-xl" alt="" />
+              </div>
+            ) : (
+              <iframe 
+                src={chartUrl} 
+                className="w-full h-full border-none" 
+                style={{ background: 'transparent' }} 
+                title="Chart" 
+              />
+            )}
+          </div>
 
-                        {/* Amount Input */}
-                        <div className="bg-[#1c1c1e] rounded-2xl p-2 flex items-center mb-4 border border-white/5">
-                            <button onClick={() => setAmount(p => Math.max(10, Number(p)-50).toString())} className="w-12 h-12 bg-[#2c2c2e] hover:bg-[#3a3a3c] rounded-xl flex items-center justify-center text-white transition-colors">
-                                <Minus size={20} />
-                            </button>
-                            <div className="flex-1 text-center">
-                                <span className="text-gray-500 text-sm font-semibold block -mb-1">Сумма</span>
-                                <div className="flex items-center justify-center gap-1">
-                                    <input 
-                                        type="number" 
-                                        value={amount} 
-                                        onChange={e => setAmount(e.target.value)} 
-                                        className="bg-transparent text-center text-2xl font-bold text-white outline-none w-24 p-0" 
-                                    />
-                                    <span className="text-xl text-gray-500 font-bold">$</span>
-                                </div>
-                            </div>
-                            <button onClick={() => setAmount(p => (Number(p)+50).toString())} className="w-12 h-12 bg-[#2c2c2e] hover:bg-[#3a3a3c] rounded-xl flex items-center justify-center text-white transition-colors">
-                                <Plus size={20} />
-                            </button>
-                        </div>
+          {/* Action Buttons */}
+          {!showOrderForm && (
+            <div className="flex-shrink-0 p-4 bg-gradient-to-t from-[#111113] via-[#111113]/95 to-transparent border-t border-white/5">
+              <div className="flex gap-3">
+                <button 
+                  onClick={() => handleShowOrderForm('Long')} 
+                  className="flex-1 h-12 bg-[#00C896] text-black text-base font-bold rounded-xl flex items-center justify-center gap-2 active:scale-95 transition-all shadow-[0_0_20px_rgba(0,200,150,0.3)]"
+                >
+                  <TrendingUp size={20} strokeWidth={3} /> Long
+                </button>
+                <button 
+                  onClick={() => handleShowOrderForm('Short')} 
+                  className="flex-1 h-12 bg-[#FF3B30] text-white text-base font-bold rounded-xl flex items-center justify-center gap-2 active:scale-95 transition-all shadow-[0_0_20px_rgba(255,59,48,0.3)]"
+                >
+                  <TrendingDown size={20} strokeWidth={3} /> Short
+                </button>
+              </div>
+            </div>
+          )}
 
-                        {/* Time Selector */}
-                        <div className="mb-8">
-                             <div className="flex justify-between text-xs font-semibold text-gray-500 mb-2 uppercase tracking-wider px-1">
-                                 <span>Таймер сделки</span>
-                                 <span className="text-[#0098EA]">{TIME_OPTIONS[timeIndex].label}</span>
-                             </div>
-                             <div className="bg-[#1c1c1e] p-1 rounded-xl flex gap-1 border border-white/5">
-                                 {TIME_OPTIONS.map((t, i) => (
-                                     <button
-                                         key={i}
-                                         onClick={() => setTimeIndex(i)}
-                                         className={`flex-1 py-2.5 rounded-lg text-sm font-bold transition-all duration-200 ${
-                                             i === timeIndex 
-                                             ? 'bg-[#3a3a3c] text-white shadow-sm ring-1 ring-white/10' 
-                                             : 'text-gray-500 hover:text-gray-300'
-                                         }`}
-                                     >
-                                         {t.label}
-                                     </button>
-                                 ))}
-                             </div>
-                        </div>
-
-                        {/* Error Message */}
-                        {errorMsg && (
-                             <div className="mb-4 bg-red-500/10 border border-red-500/20 text-red-500 text-sm p-3 rounded-xl flex items-center gap-2 animate-pulse">
-                                 <AlertTriangle size={16} /> {errorMsg}
-                             </div>
-                        )}
-
-                        {/* Main Action Button */}
-                        <button 
-                            onClick={handleOpenDeal} 
-                            className={`w-full h-14 rounded-2xl text-lg font-bold shadow-lg active:scale-[0.98] transition-all flex items-center justify-center gap-2 mb-2 ${
-                                orderSide === 'Long' 
-                                ? 'bg-[#00C896] text-black shadow-[0_4px_20px_rgba(0,200,150,0.2)]' 
-                                : 'bg-[#FF3B30] text-white shadow-[0_4px_20px_rgba(255,59,48,0.2)]'
-                            }`}
-                        >
-                            Открыть сделку
-                        </button>
-                    </div>
-                </div>
-            </>
-        )}
+        </div>
       </div>
     );
   }
 
+  // === RENDER ORDER FORM MODAL ===
+  const renderOrderFormModal = () => {
+    if (!showOrderForm) return null;
+
+    return (
+      <>
+        {/* Backdrop */}
+        <div 
+          className="fixed inset-0 z-[110] bg-black/60 backdrop-blur-sm transition-opacity" 
+          onClick={() => {
+            if (orderFormHeight === 'small') {
+              setShowOrderForm(false);
+            } else {
+              setOrderFormHeight('small');
+            }
+          }} 
+        />
+        
+        {/* Order Form Bottom Sheet */}
+        <div 
+          className={`fixed bottom-0 left-1/2 z-[120] w-full max-w-[420px] bg-[#1c1c1e] flex flex-col rounded-t-[32px] border-t border-white/10 shadow-2xl transition-all duration-300 ease-out ${
+            isOrderFormAnimating ? 'animate-[slideUpFromBottom_0.3s_ease-out]' : ''
+          } ${
+            orderFormHeight === 'full' ? 'h-[95vh]' : 'h-[70vh]'
+          }`}
+          onTouchStart={handleTouchStart}
+          onTouchMove={handleTouchMove}
+          onTouchEnd={handleTouchEnd}
+          onClick={(e) => e.stopPropagation()}
+          style={{ 
+            transform: isOrderFormAnimating 
+              ? undefined 
+              : touchCurrentY && touchStartY 
+                ? `translate(-50%, ${Math.min(0, touchStartY - touchCurrentY)}px)` 
+                : 'translate(-50%, 0)',
+            willChange: touchCurrentY && touchStartY ? 'transform' : isOrderFormAnimating ? 'transform' : 'height'
+          }}
+        >
+          {/* Drag Handle */}
+          <div className="flex-shrink-0 px-4 pt-3 pb-2">
+            <div 
+              className="w-12 h-1.5 bg-white/20 rounded-full mx-auto mb-3 cursor-ns-resize"
+              onClick={() => setOrderFormHeight(orderFormHeight === 'full' ? 'small' : 'full')}
+            />
+            
+            {/* Header */}
+            <div className="flex items-center justify-between mb-2">
+              <button
+                onClick={() => setShowOrderForm(false)}
+                className="w-8 h-8 rounded-full bg-[#252527] border border-white/5 flex items-center justify-center active:scale-90 transition-all text-white hover:bg-[#2c2c2e]"
+              >
+                <X size={16} />
+              </button>
+              <div className={`text-lg font-bold flex items-center gap-2 ${orderSide === 'Long' ? 'text-[#00C896]' : 'text-[#FF3B30]'}`}>
+                {orderSide === 'Long' ? 'Покупка' : 'Продажа'}
+                {orderSide === 'Long' ? <TrendingUp size={20}/> : <TrendingDown size={20}/>}
+              </div>
+              <button
+                onClick={() => setOrderFormHeight(orderFormHeight === 'full' ? 'small' : 'full')}
+                className="w-8 h-8 rounded-full bg-[#252527] border border-white/5 flex items-center justify-center active:scale-90 transition-all text-white hover:bg-[#2c2c2e]"
+              >
+                {orderFormHeight === 'full' ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
+              </button>
+            </div>
+          </div>
+
+          {/* Content */}
+          <div className="flex-1 overflow-y-auto px-4 pb-4 pt-2" style={{ WebkitOverflowScrolling: 'touch' }}>
+            {/* Balance Info */}
+            <div className="flex justify-between items-center mb-4 p-3 bg-[#111113] rounded-xl border border-white/5">
+              <div>
+                <div className="text-xs text-gray-400 mb-1">Доступный баланс</div>
+                <div className="text-lg font-bold text-white">${balance.toFixed(2)}</div>
+              </div>
+              <div className="text-right">
+                <div className="text-xs text-gray-400 mb-1">Плечо</div>
+                <div className="text-yellow-400 font-bold text-lg flex items-center gap-1 justify-end"><Zap size={16} fill="currentColor"/> 10x</div>
+              </div>
+            </div>
+
+            {/* Amount Input */}
+            <div className="mb-4">
+              <div className="text-xs text-gray-400 uppercase mb-2 tracking-wider">Сумма сделки</div>
+              <div className="bg-[#111113] rounded-xl p-3 flex items-center border border-white/5">
+                <button onClick={() => setAmount(p => Math.max(10, Number(p)-50).toString())} className="w-12 h-12 bg-[#1c1c1e] hover:bg-[#252527] rounded-lg flex items-center justify-center text-white transition-colors border border-white/5">
+                  <Minus size={20} />
+                </button>
+                <div className="flex-1 text-center">
+                  <div className="flex items-center justify-center gap-1">
+                    <input 
+                      type="number" 
+                      value={amount} 
+                      onChange={e => setAmount(e.target.value)} 
+                      className="bg-transparent text-center text-3xl font-bold text-white outline-none w-32 p-0" 
+                    />
+                    <span className="text-2xl text-gray-500 font-bold">$</span>
+                  </div>
+                </div>
+                <button onClick={() => setAmount(p => (Number(p)+50).toString())} className="w-12 h-12 bg-[#1c1c1e] hover:bg-[#252527] rounded-lg flex items-center justify-center text-white transition-colors border border-white/5">
+                  <Plus size={20} />
+                </button>
+              </div>
+            </div>
+
+            {/* Time Selector */}
+            <div className="mb-6">
+              <div className="flex justify-between text-xs font-semibold text-gray-400 mb-3 uppercase tracking-wider">
+                <span>Время сделки</span>
+                <span className="text-[#0098EA] font-bold">{TIME_OPTIONS[timeIndex].label}</span>
+              </div>
+              <div className="bg-[#111113] p-1.5 rounded-xl flex gap-1.5 border border-white/5">
+                {TIME_OPTIONS.map((t, i) => (
+                  <button
+                    key={i}
+                    onClick={() => setTimeIndex(i)}
+                    className={`flex-1 py-3 rounded-lg text-sm font-bold transition-all duration-200 ${
+                      i === timeIndex 
+                      ? 'bg-[#252527] text-white shadow-sm ring-1 ring-white/10 border border-white/5' 
+                      : 'text-gray-500 hover:text-gray-300'
+                    }`}
+                  >
+                    {t.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Error Message */}
+            {errorMsg && (
+              <div className="mb-3 bg-red-500/10 border border-red-500/20 text-red-500 text-xs p-2 rounded-lg flex items-center gap-2 animate-pulse">
+                <AlertTriangle size={14} /> {errorMsg}
+              </div>
+            )}
+
+            {/* Main Action Button */}
+            <button 
+              onClick={handleOpenDeal} 
+              className={`w-full h-14 rounded-xl text-lg font-bold shadow-lg active:scale-[0.98] transition-all flex items-center justify-center gap-2 mb-4 ${
+                orderSide === 'Long' 
+                ? 'bg-[#00C896] text-black shadow-[0_4px_20px_rgba(0,200,150,0.2)]' 
+                : 'bg-[#FF3B30] text-white shadow-[0_4px_20px_rgba(255,59,48,0.2)]'
+              }`}
+            >
+              Открыть сделку
+            </button>
+          </div>
+        </div>
+      </>
+    );
+  };
+
   // === RENDER LIST VIEW ===
   return (
-    <div className="h-full flex flex-col bg-black text-white overflow-hidden">
+    <>
+      {renderChartModal()}
+      {renderOrderFormModal()}
+      <div className="h-full flex flex-col bg-black text-white overflow-hidden">
       {/* Top Navigation (Segmented Control) */}
       <div className="shrink-0 pt-4 px-4 pb-2 z-10 bg-black">
          <div className="bg-[#1c1c1e] p-1 rounded-2xl flex relative h-12 border border-white/5">
@@ -575,7 +733,7 @@ const TradingPage: React.FC<TradingPageProps> = ({ activeDeals, onCreateDeal, ba
                           className={`px-4 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap border transition-all ${
                               activeCategory === cat 
                               ? 'bg-white text-black border-white' 
-                              : 'bg-transparent text-gray-400 border-gray-800 hover:border-gray-600'
+                              : 'bg-transparent text-gray-400 border-white/5 hover:border-white/10'
                           }`}
                       >
                           {cat}
@@ -585,7 +743,7 @@ const TradingPage: React.FC<TradingPageProps> = ({ activeDeals, onCreateDeal, ba
             </div>
 
             {/* List */}
-            <div className="flex-1 overflow-y-auto px-4 pb-24" onScroll={handleScroll}>
+            <div className="flex-1 overflow-y-auto px-4 pb-24" onScroll={handleScroll} style={{ WebkitOverflowScrolling: 'touch' }}>
               {filteredPairs.map(pair => {
                  const displayPrice = dynamicPrices[pair.id]?.price || pair.price;
                  const displayChange = dynamicPrices[pair.id]?.change || pair.change;
@@ -607,11 +765,13 @@ const TradingPage: React.FC<TradingPageProps> = ({ activeDeals, onCreateDeal, ba
                                <div className="text-xs text-gray-500 font-medium">{pair.name}</div>
                            </div>
                        </div>
-                       <div className="text-right">
-                           <div className="font-mono font-medium text-base mb-0.5 tracking-tight">${displayPrice}</div>
-                           <div className={`text-xs font-bold px-1.5 py-0.5 rounded-md inline-flex items-center gap-0.5 ${isPos ? 'bg-[#00C896]/10 text-[#00C896]' : 'bg-[#FF3B30]/10 text-[#FF3B30]'}`}>
-                               {isPos ? '+' : ''}{displayChange}
-                           </div>
+                       <div className="flex items-center gap-3">
+                           <div className="text-right">
+                               <div className="font-mono font-medium text-base mb-0.5 tracking-tight">${displayPrice}</div>
+                               <div className={`text-xs font-bold px-1.5 py-0.5 rounded-md inline-flex items-center gap-0.5 ${isPos ? 'bg-[#00C896]/10 text-[#00C896]' : 'bg-[#FF3B30]/10 text-[#FF3B30]'}`}>
+                                   {isPos ? '+' : ''}{displayChange}
+                               </div>
+                               </div>
                        </div>
                     </div>
                  )
@@ -623,7 +783,7 @@ const TradingPage: React.FC<TradingPageProps> = ({ activeDeals, onCreateDeal, ba
 
         {/* Deals List */}
         {viewMode === 'deals' && (
-           <div className="flex-1 overflow-y-auto px-4 pt-2 pb-24">
+           <div className="flex-1 overflow-y-auto px-4 pt-2 pb-24" style={{ WebkitOverflowScrolling: 'touch' }}>
               {activeDeals.length === 0 ? (
                   <div className="flex flex-col items-center justify-center h-64 text-gray-500 opacity-50">
                       <History size={48} strokeWidth={1} />
@@ -676,6 +836,7 @@ const TradingPage: React.FC<TradingPageProps> = ({ activeDeals, onCreateDeal, ba
         )}
       </div>
     </div>
+    </>
   );
 };
 

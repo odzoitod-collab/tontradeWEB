@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { memo } from 'react';
 import { WalletIcon, ChartIcon, UserIcon, CoinsIcon } from '../icons';
 
 interface BottomNavigationProps {
@@ -6,7 +6,7 @@ interface BottomNavigationProps {
   onTabChange: (tab: string) => void;
 }
 
-const BottomNavigation: React.FC<BottomNavigationProps> = ({ currentTab, onTabChange }) => {
+const BottomNavigation: React.FC<BottomNavigationProps> = memo(({ currentTab, onTabChange }) => {
   return (
     // Контейнер позиционирования: фиксирован внизу, по центру
     <div className="fixed bottom-0 left-1/2 transform -translate-x-1/2 z-50 w-full px-4 max-w-[420px]">
@@ -19,7 +19,8 @@ const BottomNavigation: React.FC<BottomNavigationProps> = ({ currentTab, onTabCh
         border border-white/10 
         rounded-[24px] 
         shadow-lg shadow-black/40
-      ">
+        pb-safe
+      " style={{ paddingBottom: 'max(0.5rem, env(safe-area-inset-bottom))' }}>
         <NavButton 
           icon={<CoinsIcon active={currentTab === 'home'} />} 
           label="Главная" 
@@ -48,7 +49,7 @@ const BottomNavigation: React.FC<BottomNavigationProps> = ({ currentTab, onTabCh
       </div>
     </div>
   );
-};
+});
 
 const NavButton = ({ 
   icon, 
@@ -75,7 +76,7 @@ const NavButton = ({
   >
     {/* Фон для активной вкладки (мягкое свечение) */}
     {active && (
-      <div className="absolute inset-0 bg-white/5 rounded-[18px] opacity-100 transition-opacity" />
+      <div className="absolute inset-0 bg-white/5 rounded-[18px] opacity-100 transition-opacity" style={{ willChange: 'opacity' }} />
     )}
     
     {/* Иконка с анимацией цвета и позиции */}
@@ -84,7 +85,7 @@ const NavButton = ({
       transition-transform duration-300 
       ${active ? 'text-white scale-110 -translate-y-0.5' : 'text-gray-500 group-hover:text-gray-400'}
       ${highlight && !active ? 'text-[#0098EA]' : ''}
-    `}>
+    `} style={{ willChange: 'transform' }}>
       {icon}
     </div>
 

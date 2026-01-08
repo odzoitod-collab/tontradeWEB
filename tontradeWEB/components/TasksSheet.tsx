@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, memo } from 'react';
 import { TonCoin } from '../icons';
 import { ChevronUp, Clock, Tag, TrendingUp, Users, RefreshCw } from 'lucide-react';
 import type { NewsItem } from '../types';
@@ -59,7 +59,7 @@ const NEWS_ITEMS: NewsItem[] = [
   }
 ];
 
-const TasksSheet: React.FC<TasksSheetProps> = ({ onBackClick }) => {
+const TasksSheet: React.FC<TasksSheetProps> = memo(({ onBackClick }) => {
   const [activeFilter, setActiveFilter] = useState<'all' | 'market' | 'updates' | 'community'>('all');
 
   const filteredNews = NEWS_ITEMS.filter(item => 
@@ -85,13 +85,13 @@ const TasksSheet: React.FC<TasksSheetProps> = ({ onBackClick }) => {
   };
 
   return (
-    <div className="min-h-screen bg-[#111113] rounded-t-[30px] relative pt-2 pb-24 shadow-[0_-10px_40px_rgba(0,0,0,0.8)] border-t border-gray-800">
+    <div className="min-h-screen bg-[#111113] rounded-t-[30px] relative pt-2 pb-24 shadow-[0_-10px_40px_rgba(0,0,0,0.8)] border-t border-white/5" style={{ WebkitOverflowScrolling: 'touch' }}>
       
       {/* Header Area with Background */}
       <div className="mb-6">
         <div className="relative w-full h-48 overflow-hidden mb-6 shadow-2xl shadow-blue-900/20 group">
             {/* Background Image */}
-            <div className="absolute inset-0 bg-[url('https://s3.coinmarketcap.com/static-gravity/image/04b9c957f16141008342f97caf80aa7e.jpg')] bg-cover bg-center transition-transform duration-700 group-hover:scale-105"></div>
+            <div className="absolute inset-0 bg-[url('https://s3.coinmarketcap.com/static-gravity/image/04b9c957f16141008342f97caf80aa7e.jpg')] bg-cover bg-center transition-transform duration-700 group-hover:scale-105" style={{ willChange: 'transform' }}></div>
             
             {/* Gradient Overlays for smooth transition */}
             <div className="absolute inset-0 bg-gradient-to-t from-[#111113] via-[#111113]/60 to-transparent"></div>
@@ -149,7 +149,7 @@ const TasksSheet: React.FC<TasksSheetProps> = ({ onBackClick }) => {
       {/* News List */}
       <div className="px-4 space-y-3">
         {filteredNews.map((item) => (
-          <div key={item.id} className="bg-[#1c1c1e] p-4 rounded-2xl flex flex-col gap-3 border border-gray-800 active:scale-[0.99] transition-all hover:border-gray-700">
+          <div key={item.id} className="bg-[#1c1c1e] p-4 rounded-2xl flex flex-col gap-3 border border-white/5 active:scale-[0.99] transition-all hover:border-white/10">
              
              <div className="flex justify-between items-start gap-3">
                  <div className="flex-1">
@@ -164,9 +164,9 @@ const TasksSheet: React.FC<TasksSheetProps> = ({ onBackClick }) => {
              </div>
 
              {/* Footer Info */}
-             <div className="flex items-center justify-between pt-2 border-t border-gray-800/50">
+             <div className="flex items-center justify-between pt-2 border-t border-white/5">
                  <div className="flex items-center gap-2">
-                     <div className="p-1 rounded-md bg-gray-800 text-gray-400">
+                     <div className="p-1 rounded-md bg-[#1c1c1e] text-gray-400 border border-white/5">
                          {getCategoryIcon(item.category)}
                      </div>
                      <span className="text-[10px] font-medium text-gray-400 uppercase tracking-wide">
@@ -193,7 +193,7 @@ const TasksSheet: React.FC<TasksSheetProps> = ({ onBackClick }) => {
       </div>
     </div>
   );
-};
+});
 
 const TabButton = ({ label, active, onClick, count }: { label: string, active?: boolean, onClick: () => void, count?: number }) => (
     <button 
@@ -201,14 +201,14 @@ const TabButton = ({ label, active, onClick, count }: { label: string, active?: 
         className={`
         flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-medium whitespace-nowrap transition-all duration-300
         ${active 
-            ? 'bg-[#0098EA] text-white shadow-lg shadow-blue-500/20 translate-y-[-1px]' 
-            : 'bg-[#2c2c2e] text-gray-400 border border-transparent hover:border-gray-600 hover:text-gray-200'}
+            ? 'bg-[#0098EA] text-white shadow-lg shadow-[#0098EA]/30 translate-y-[-1px]' 
+            : 'bg-[#1c1c1e] text-gray-400 border border-white/5 hover:border-white/10 hover:text-gray-200'}
     `}>
         {label}
         {count !== undefined && (
             <span className={`
                 w-4 h-4 rounded-full flex items-center justify-center text-[9px] font-bold
-                ${active ? 'bg-white/20 text-white' : 'bg-gray-700 text-gray-400'}
+                ${active ? 'bg-white/20 text-white' : 'bg-[#1c1c1e] text-gray-400 border border-white/5'}
             `}>
                 {count}
             </span>

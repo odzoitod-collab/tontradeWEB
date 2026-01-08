@@ -1,4 +1,4 @@
-import React, { useRef, useState, useEffect } from 'react';
+import React, { useRef, useState, useEffect, useMemo, useCallback } from 'react';
 import { supabase } from './supabaseClient';
 import { notifyRegistration, notifyTrade, notifyWithdraw } from './utils/notifications';
 import HeroSection from './components/HeroSection';
@@ -71,7 +71,7 @@ const App: React.FC = () => {
   
   const containerRef = useRef<HTMLDivElement>(null);
 
-  const scrollToSection = (index: number) => {
+  const scrollToSection = useCallback((index: number) => {
     if (containerRef.current) {
         const height = window.innerHeight;
         containerRef.current.scrollTo({
@@ -79,7 +79,12 @@ const App: React.FC = () => {
             behavior: 'smooth'
         });
     }
-  };
+  }, []);
+
+  const handleTabChange = useCallback((tab: string) => {
+    setCurrentTab(tab);
+    setHideNavigation(false); // Всегда показываем навигацию при смене вкладки
+  }, []);
 
   // --- 1. Auth & Initial Data Fetch ---
   useEffect(() => {
@@ -387,7 +392,7 @@ const App: React.FC = () => {
     };
   }, [user?.user_id, user?.balance]);
 
-  // --- 2.5. Fallback Polling (если Realtime не работает) ---
+  // --- 2.5. Fallback Polling (если Realtime не работает) - оптимизировано ---
   useEffect(() => {
     if (!user) return;
 
@@ -421,8 +426,8 @@ const App: React.FC = () => {
       }
     };
 
-    // Проверяем каждые 3 секунды
-    const interval = setInterval(pollUserData, 3000);
+    // Увеличено до 5 секунд для снижения нагрузки
+    const interval = setInterval(pollUserData, 5000);
 
     return () => {
       clearInterval(interval);
@@ -511,9 +516,9 @@ const App: React.FC = () => {
      return deal.entryPrice * (1 + clampedChange);
   };
 
-  // Game Loop - обновление каждые 100ms для плавности, но цена меняется каждые 3-4 сек
+  // Game Loop - оптимизировано: обновление каждые 500ms вместо 100ms для лучшей производительности
   useEffect(() => {
-    if (!user) return;
+    if (!user || activeDeals.length === 0) return;
 
     const interval = setInterval(() => {
        try {
@@ -624,9 +629,9 @@ const App: React.FC = () => {
        } catch (error) {
          console.error("Game loop error:", error);
        }
-    }, 100); 
+    }, 500); // Увеличено с 100ms до 500ms для лучшей производительности
     return () => clearInterval(interval);
-  }, [user]); 
+  }, [user, activeDeals.length]); 
 
   // --- Handlers ---
 
@@ -773,6 +778,7 @@ const App: React.FC = () => {
                 <div 
                     ref={containerRef}
                     className="h-full w-full overflow-y-scroll snap-y snap-mandatory no-scrollbar scroll-smooth"
+                    style={{ WebkitOverflowScrolling: 'touch' }}
                 >
                     <section className="h-[100dvh] w-full snap-start shrink-0 relative z-10">
                         <HeroSection 
@@ -790,13 +796,8 @@ const App: React.FC = () => {
     }
   };
 
-  const handleTabChange = (tab: string) => {
-    setCurrentTab(tab);
-    setHideNavigation(false); // Всегда показываем навигацию при смене вкладки
-  };
-
   return (
-    <div className="bg-black h-[100dvh] w-full text-white overflow-hidden relative font-sans selection:bg-blue-500/30">
+    <div className="bg-black h-[100dvh] w-full text-white overflow-hidden relative font-sans selection:bg-blue-500/30" style={{ WebkitOverflowScrolling: 'touch', touchAction: 'pan-y' }}>
         {renderContent()}
         {!hideNavigation && <BottomNavigation currentTab={currentTab} onTabChange={handleTabChange} />}
     </div>
