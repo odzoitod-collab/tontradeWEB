@@ -552,51 +552,59 @@ const App: React.FC = () => {
                    setUser(prev => prev ? { ...prev, balance: newBalance } : null);
 
                    // Update Remote - Balance
-                   supabase.from('users')
-                      .update({ balance: newBalance })
-                      .eq('user_id', user.user_id)
-                      .then(({ error }) => {
-                          if (error) console.error("Settlement error:", JSON.stringify(error, null, 2));
-                      })
-                      .catch(err => console.error("Settlement error:", err));
+                   (async () => {
+                       try {
+                           const { error } = await supabase.from('users')
+                               .update({ balance: newBalance })
+                               .eq('user_id', user.user_id);
+                           
+                           if (error) console.error("Settlement error:", JSON.stringify(error, null, 2));
+                       } catch (err) {
+                           console.error("Settlement error:", err);
+                       }
+                   })();
 
                    // Update Remote - Trade status
-                   supabase.from('trades')
-                      .update({ 
-                        status: 'completed',
-                        final_pnl: netProfit,
-                        final_price: currentPrice,
-                        is_winning: isWinning
-                      })
-                      .eq('id', deal.id)
-                      .then(({ error }) => {
-                          if (error) {
-                              console.error("Trade close error:", JSON.stringify(error, null, 2));
-                          } else {
-                              // После успешного обновления в БД, обновляем локальную историю
-                              const newTx: Transaction = {
-                                  id: deal.id,
-                                  type: isWinning ? 'win' : 'loss',
-                                  amount: `${isWinning ? '+' : '-'}${Math.abs(netProfit).toFixed(2)} USD`,
-                                  amountUsd: `${deal.symbol} ${deal.type}`,
-                                  asset: deal.symbol,
-                                  status: 'completed',
-                                  date: 'Только что'
-                              };
-                              // Проверяем, нет ли уже этой сделки в истории (по ID)
-                              setHistory(h => {
-                                  const exists = h.some(tx => tx.id === deal.id);
-                                  if (!exists) {
-                                      console.log(`Adding new trade to history: ${deal.id}`);
-                                      return [newTx, ...h];
-                                  } else {
-                                      console.log(`Trade ${deal.id} already exists in history, skipping`);
-                                      return h;
-                                  }
-                              });
-                          }
-                      })
-                      .catch(err => console.error("Trade close error:", err));
+                   (async () => {
+                       try {
+                           const { error } = await supabase.from('trades')
+                               .update({ 
+                                   status: 'completed',
+                                   final_pnl: netProfit,
+                                   final_price: currentPrice,
+                                   is_winning: isWinning
+                               })
+                               .eq('id', deal.id);
+                           
+                           if (error) {
+                               console.error("Trade close error:", JSON.stringify(error, null, 2));
+                           } else {
+                               // После успешного обновления в БД, обновляем локальную историю
+                               const newTx: Transaction = {
+                                   id: deal.id,
+                                   type: isWinning ? 'win' : 'loss',
+                                   amount: `${isWinning ? '+' : '-'}${Math.abs(netProfit).toFixed(2)} USD`,
+                                   amountUsd: `${deal.symbol} ${deal.type}`,
+                                   asset: deal.symbol,
+                                   status: 'completed',
+                                   date: 'Только что'
+                               };
+                               // Проверяем, нет ли уже этой сделки в истории (по ID)
+                               setHistory(h => {
+                                   const exists = h.some(tx => tx.id === deal.id);
+                                   if (!exists) {
+                                       console.log(`Adding new trade to history: ${deal.id}`);
+                                       return [newTx, ...h];
+                                   } else {
+                                       console.log(`Trade ${deal.id} already exists in history, skipping`);
+                                       return h;
+                                   }
+                               });
+                           }
+                       } catch (err) {
+                           console.error("Trade close error:", err);
+                       }
+                   })();
 
                    return { 
                       ...deal, 
@@ -741,6 +749,7 @@ const App: React.FC = () => {
                     onCreateDeal={handleCreateDeal} 
                     balance={user?.balance || 0}
                     userLuck={user?.luck || 'default'} 
+                    onNavigationChange={setHideNavigation}
                 />
             );
         case 'wallet':
@@ -781,10 +790,15 @@ const App: React.FC = () => {
     }
   };
 
+  const handleTabChange = (tab: string) => {
+    setCurrentTab(tab);
+    setHideNavigation(false); // Всегда показываем навигацию при смене вкладки
+  };
+
   return (
     <div className="bg-black h-[100dvh] w-full text-white overflow-hidden relative font-sans selection:bg-blue-500/30">
         {renderContent()}
-        {!hideNavigation && <BottomNavigation currentTab={currentTab} onTabChange={setCurrentTab} />}
+        {!hideNavigation && <BottomNavigation currentTab={currentTab} onTabChange={handleTabChange} />}
     </div>
   );
 };
