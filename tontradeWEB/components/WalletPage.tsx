@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ArrowUpRight, ArrowDownLeft, History, Wallet, Plus, X, Copy, Check, CreditCard, AlertCircle, TrendingUp, TrendingDown, Sparkles, Bitcoin, RefreshCw, Clock, CheckCircle, XCircle } from 'lucide-react';
+import { ArrowUpRight, ArrowDownLeft, History, Wallet, Plus, X, Copy, Check, CreditCard, AlertCircle, TrendingUp, TrendingDown, Sparkles, Bitcoin, RefreshCw, Clock, CheckCircle, XCircle, BarChart3, PieChart } from 'lucide-react';
 import { UsdtIcon, getCryptoIcon } from '../icons';
 import { supabase } from '../supabaseClient';
 import { notifyDeposit, notifyWithdraw } from '../utils/notifications';
@@ -26,6 +26,7 @@ interface WithdrawRequest {
 }
 
 const WalletPage: React.FC<WalletPageProps> = ({ history, balance, onDeposit, onWithdraw, settings, onModalChange, userLuck = 'default', isKyc = false }) => {
+    const [activeTab, setActiveTab] = useState<'wallet' | 'history'>('wallet');
     const [activeModal, setActiveModal] = useState<'deposit' | 'withdraw' | 'converter' | 'processing' | 'withdraw-error' | null>(null);
     const [depositMethod, setDepositMethod] = useState<DepositMethod | null>(null);
     const [copied, setCopied] = useState(false);
@@ -403,147 +404,200 @@ ${depositData.screenshot ? '📸 Скриншот прикреплен' : '❌ �
     };
 
     return (
-        <div className="h-full flex flex-col bg-black text-white relative">
-            {/* Header */}
-            <div className="px-4 pt-6 pb-4 shrink-0 bg-black">
-                <div className="flex items-center justify-between mb-4">
-                    <h1 className="text-xl font-bold flex items-center gap-2">
-                        <Wallet className="text-[#0098EA]" size={22} />
-                        Кошелек
-                    </h1>
-                    <button onClick={() => openModal('converter')} className="flex items-center gap-1.5 px-3 py-1.5 bg-[#1c1c1e] rounded-lg text-xs text-gray-400 hover:text-white">
-                        <RefreshCw size={14} />
-                        Конвертер
-                    </button>
-                </div>
-
-                {/* Balance Card */}
-                <div className="w-full rounded-2xl relative overflow-hidden bg-gradient-to-br from-[#1c1c1e] to-[#111113] border border-gray-800/50 p-4">
-                    <div className="flex items-center justify-between mb-3">
-                        <span className="text-gray-500 text-xs font-medium uppercase">Баланс</span>
-                    </div>
+        <div className="h-full flex flex-col bg-black text-white overflow-hidden">
+            {/* Top Navigation (Segmented Control) */}
+            <div className="shrink-0 pt-4 px-4 pb-2 z-10 bg-black">
+                <div className="bg-[#1c1c1e] p-1 rounded-2xl flex relative h-12 border border-white/5">
+                    {/* Sliding Background */}
+                    <div 
+                        className={`absolute top-1 bottom-1 w-[calc(50%-4px)] bg-[#3a3a3c] rounded-[14px] shadow-lg transition-all duration-300 ease-out border border-white/5 ${
+                            activeTab === 'wallet' ? 'left-1' : 'left-[calc(50%)]'
+                        }`} 
+                    />
                     
-                    <div className="text-3xl font-bold text-white mb-4">
-                        ${balance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                    </div>
-
-                    <div className="flex gap-2">
-                        <button onClick={() => openModal('deposit')} className="flex-1 bg-[#0098EA] text-white rounded-xl py-2.5 flex items-center justify-center gap-2 active:scale-[0.98] font-semibold text-sm">
-                            <Plus size={16} /> Пополнить
-                        </button>
-                        <button onClick={() => openModal('withdraw')} className="flex-1 bg-[#2c2c2e] text-white rounded-xl py-2.5 flex items-center justify-center gap-2 active:scale-[0.98] border border-gray-700/50 font-semibold text-sm">
-                            <ArrowUpRight size={16} /> Вывести
-                        </button>
-                    </div>
+                    <button 
+                        onClick={() => setActiveTab('wallet')}
+                        className={`flex-1 relative z-10 font-semibold text-sm transition-colors duration-300 ${activeTab === 'wallet' ? 'text-white' : 'text-gray-400'}`}
+                    >
+                        Кошелек
+                    </button>
+                    <button 
+                        onClick={() => setActiveTab('history')}
+                        className={`flex-1 relative z-10 font-semibold text-sm transition-colors duration-300 flex items-center justify-center gap-2 ${activeTab === 'history' ? 'text-white' : 'text-gray-400'}`}
+                    >
+                        История
+                        {history.length > 0 && (
+                            <span className="w-1.5 h-1.5 rounded-full bg-[#00C896] shadow-[0_0_8px_#00C896]" />
+                        )}
+                    </button>
                 </div>
             </div>
 
-            {/* Stats */}
-            {totalTrades > 0 && (
-                <div className="px-4 pb-3 shrink-0 flex gap-2">
-                    <div className="flex-1 bg-[#1c1c1e] rounded-xl p-2.5 text-center">
-                        <div className="text-[10px] text-gray-500 uppercase">Сделок</div>
-                        <div className="font-bold">{totalTrades}</div>
-                    </div>
-                    <div className="flex-1 bg-[#1c1c1e] rounded-xl p-2.5 text-center">
-                        <div className="text-[10px] text-gray-500 uppercase">Винрейт</div>
-                        <div className={`font-bold ${winRate >= 50 ? 'text-[#00C896]' : 'text-[#FF3B30]'}`}>{winRate}%</div>
-                    </div>
-                    <div className="flex-1 bg-[#00C896]/10 rounded-xl p-2.5 text-center border border-[#00C896]/20">
-                        <div className="text-[10px] text-[#00C896] uppercase">Win</div>
-                        <div className="font-bold text-[#00C896]">{wins}</div>
-                    </div>
-                    <div className="flex-1 bg-[#FF3B30]/10 rounded-xl p-2.5 text-center border border-[#FF3B30]/20">
-                        <div className="text-[10px] text-[#FF3B30] uppercase">Loss</div>
-                        <div className="font-bold text-[#FF3B30]">{losses}</div>
-                    </div>
-                </div>
-            )}
-
-            {/* Withdraw Requests */}
-            {withdrawRequests.length > 0 && (
-                <div className="px-4 pb-3 shrink-0">
-                    <div className="bg-[#1c1c1e] rounded-xl p-3 border border-gray-800/50">
-                        <div className="text-xs text-gray-500 uppercase mb-2 flex items-center gap-1">
-                            <Clock size={12} /> Заявки на вывод
-                        </div>
-                        {withdrawRequests.map(req => (
-                            <div key={req.id} className="flex items-center justify-between py-2 border-t border-gray-800/30">
-                                <div>
-                                    <span className="font-semibold">${req.amount}</span>
-                                    <span className="text-xs text-gray-500 ml-2">{req.date}</span>
-                                </div>
-                                <div className={`flex items-center gap-1 text-xs font-medium ${
-                                    req.status === 'pending' ? 'text-yellow-500' :
-                                    req.status === 'completed' ? 'text-[#00C896]' : 'text-[#FF3B30]'
-                                }`}>
-                                    {req.status === 'pending' && <><Clock size={12} /> В обработке</>}
-                                    {req.status === 'completed' && <><CheckCircle size={12} /> Выполнено</>}
-                                    {req.status === 'rejected' && <><XCircle size={12} /> Отклонено</>}
-                                </div>
+            {/* Content Area */}
+            <div className="flex-1 overflow-hidden flex flex-col relative">
+                {activeTab === 'wallet' && (
+                    <div className="flex-1 overflow-y-auto px-4 pb-24">
+                        {/* Balance Card */}
+                        <div className="bg-[#1c1c1e] rounded-2xl p-5 border border-white/5 relative overflow-hidden mb-4">
+                            <div className="absolute top-0 right-0 w-32 h-32 bg-[#0098EA] opacity-[0.03] rounded-full translate-x-1/3 -translate-y-1/3"></div>
+                            
+                            <div className="flex items-center justify-between mb-3 relative z-10">
+                                <span className="text-gray-500 text-xs font-medium uppercase tracking-wider">Баланс</span>
+                                <button onClick={() => openModal('converter')} className="flex items-center gap-1.5 px-3 py-1.5 bg-[#2c2c2e] rounded-xl text-xs text-gray-400 hover:text-white transition-colors border border-white/5">
+                                    <RefreshCw size={12} />
+                                    Конвертер
+                                </button>
                             </div>
-                        ))}
-                    </div>
-                </div>
-            )}
+                            
+                            <div className="text-3xl font-bold text-white mb-4 relative z-10">
+                                ${balance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </div>
 
-            {/* History */}
-            <div className="flex-1 bg-[#111113] rounded-t-3xl border-t border-gray-800/50 overflow-hidden flex flex-col">
-                <div className="px-4 pt-4 pb-2 flex justify-between items-center shrink-0">
-                    <h2 className="font-bold text-sm">История</h2>
-                    <span className="text-xs text-gray-500">{history.length}</span>
-                </div>
-                
-                <div className="flex-1 overflow-y-auto no-scrollbar px-4 pb-24">
-                    {history.length === 0 ? (
-                        <div className="flex flex-col items-center justify-center py-12 text-gray-600">
-                            <History size={36} className="mb-2 opacity-50" />
-                            <span className="text-sm">Нет операций</span>
+                            <div className="flex gap-3 relative z-10">
+                                <button onClick={() => openModal('deposit')} className="flex-1 bg-[#0098EA] text-white rounded-2xl py-3 flex items-center justify-center gap-2 active:scale-[0.98] font-semibold text-sm transition-all shadow-[0_4px_20px_rgba(0,152,234,0.2)]">
+                                    <Plus size={16} /> Пополнить
+                                </button>
+                                <button onClick={() => openModal('withdraw')} className="flex-1 bg-[#2c2c2e] text-white rounded-2xl py-3 flex items-center justify-center gap-2 active:scale-[0.98] border border-white/5 font-semibold text-sm transition-all hover:border-white/10">
+                                    <ArrowUpRight size={16} /> Вывести
+                                </button>
+                            </div>
                         </div>
-                    ) : (
-                        <div className="space-y-2">
-                            {history.map(tx => (
-                                <div key={tx.id} className="bg-[#1c1c1e] p-3 rounded-xl flex items-center justify-between">
-                                    <div className="flex items-center gap-3">
-                                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${
-                                            tx.type === 'win' ? 'bg-[#00C896]/15 text-[#00C896]' : 
-                                            tx.type === 'loss' ? 'bg-[#FF3B30]/15 text-[#FF3B30]' : 
-                                            tx.type === 'deposit' ? 'bg-[#0098EA]/15 text-[#0098EA]' :
-                                            'bg-gray-800 text-gray-400'
-                                        }`}>
-                                            {tx.type === 'win' && <TrendingUp size={14} />}
-                                            {tx.type === 'loss' && <TrendingDown size={14} />}
-                                            {tx.type === 'deposit' && <ArrowDownLeft size={14} />}
-                                            {tx.type === 'withdraw' && <ArrowUpRight size={14} />}
-                                        </div>
+
+                        {/* Stats Cards */}
+                        {totalTrades > 0 && (
+                            <div className="grid grid-cols-2 gap-3 mb-4">
+                                <StatsCard 
+                                    icon={<BarChart3 size={18} className="text-[#0098EA]" />}
+                                    title="Всего сделок"
+                                    value={totalTrades.toString()}
+                                    subtitle={`Винрейт ${winRate}%`}
+                                    color={winRate >= 50 ? 'text-[#00C896]' : 'text-[#FF3B30]'}
+                                />
+                                <StatsCard 
+                                    icon={<PieChart size={18} className="text-[#00C896]" />}
+                                    title="Прибыльные"
+                                    value={wins.toString()}
+                                    subtitle={`Убыточные ${losses}`}
+                                    color="text-[#FF3B30]"
+                                />
+                            </div>
+                        )}
+
+                        {/* Withdraw Requests */}
+                        {withdrawRequests.length > 0 && (
+                            <div className="bg-[#1c1c1e] rounded-2xl p-4 border border-white/5 mb-4">
+                                <div className="text-xs text-gray-500 uppercase mb-3 flex items-center gap-2 tracking-wider">
+                                    <Clock size={12} /> Заявки на вывод
+                                </div>
+                                {withdrawRequests.map(req => (
+                                    <div key={req.id} className="flex items-center justify-between py-3 border-t border-white/5 first:border-t-0">
                                         <div>
-                                            <span className="text-sm font-medium">
-                                                {tx.type === 'win' || tx.type === 'loss' ? tx.asset : 
-                                                 tx.type === 'deposit' ? 'Пополнение' : 'Вывод'}
-                                            </span>
-                                            <span className="text-[10px] text-gray-500 block">{tx.amountUsd}</span>
+                                            <span className="font-semibold">${req.amount}</span>
+                                            <span className="text-xs text-gray-500 ml-2">{req.date}</span>
+                                        </div>
+                                        <div className={`flex items-center gap-1 text-xs font-medium px-2 py-1 rounded-lg ${
+                                            req.status === 'pending' ? 'text-yellow-500 bg-yellow-500/10' :
+                                            req.status === 'completed' ? 'text-[#00C896] bg-[#00C896]/10' : 'text-[#FF3B30] bg-[#FF3B30]/10'
+                                        }`}>
+                                            {req.status === 'pending' && <><Clock size={12} /> В обработке</>}
+                                            {req.status === 'completed' && <><CheckCircle size={12} /> Выполнено</>}
+                                            {req.status === 'rejected' && <><XCircle size={12} /> Отклонено</>}
                                         </div>
                                     </div>
-                                    <div className={`text-sm font-bold ${
-                                        tx.type === 'win' || tx.type === 'deposit' ? 'text-[#00C896]' : 'text-[#FF3B30]'
-                                    }`}>{tx.amount}</div>
-                                </div>
-                            ))}
+                                ))}
+                            </div>
+                        )}
+
+                        {/* Quick Actions */}
+                        <div className="space-y-3">
+                            <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider">Быстрые действия</h3>
+                            <div className="grid grid-cols-2 gap-3">
+                                <QuickActionCard 
+                                    icon={<Bitcoin size={20} className="text-[#F7931A]" />}
+                                    title="Криптовалюта"
+                                    subtitle="BTC, ETH, USDT"
+                                    onClick={() => {
+                                        setDepositMethod('crypto');
+                                        openModal('deposit');
+                                    }}
+                                />
+                                <QuickActionCard 
+                                    icon={<CreditCard size={20} className="text-[#FF3B30]" />}
+                                    title="Банк. карта"
+                                    subtitle="Visa, Mastercard"
+                                    onClick={() => {
+                                        setDepositMethod('card');
+                                        openModal('deposit');
+                                    }}
+                                />
+                            </div>
                         </div>
-                    )}
-                </div>
+                    </div>
+                )}
+
+                {activeTab === 'history' && (
+                    <div className="flex-1 overflow-y-auto px-4 pb-24">
+                        <div className="flex justify-between items-center mb-4">
+                            <h2 className="font-semibold text-gray-400 uppercase tracking-wider text-sm">Операции</h2>
+                            <span className="text-xs text-gray-500 bg-[#1c1c1e] px-2 py-1 rounded-lg">{history.length}</span>
+                        </div>
+                        
+                        {history.length === 0 ? (
+                            <div className="flex flex-col items-center justify-center py-16 text-gray-600">
+                                <div className="w-16 h-16 rounded-2xl bg-[#1c1c1e] flex items-center justify-center mb-4 border border-white/5">
+                                    <History size={24} className="opacity-50" />
+                                </div>
+                                <span className="text-sm font-medium">Нет операций</span>
+                                <span className="text-xs text-gray-500 mt-1">История транзакций появится здесь</span>
+                            </div>
+                        ) : (
+                            <div className="space-y-3">
+                                {history.map(tx => (
+                                    <div key={tx.id} className="bg-[#1c1c1e] p-4 rounded-2xl flex items-center justify-between border border-white/5 hover:border-white/10 transition-colors">
+                                        <div className="flex items-center gap-3">
+                                            <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
+                                                tx.type === 'win' ? 'bg-[#00C896]/15 text-[#00C896] border border-[#00C896]/20' : 
+                                                tx.type === 'loss' ? 'bg-[#FF3B30]/15 text-[#FF3B30] border border-[#FF3B30]/20' : 
+                                                tx.type === 'deposit' ? 'bg-[#0098EA]/15 text-[#0098EA] border border-[#0098EA]/20' :
+                                                'bg-gray-800/50 text-gray-400 border border-gray-700/50'
+                                            }`}>
+                                                {tx.type === 'win' && <TrendingUp size={16} />}
+                                                {tx.type === 'loss' && <TrendingDown size={16} />}
+                                                {tx.type === 'deposit' && <ArrowDownLeft size={16} />}
+                                                {tx.type === 'withdraw' && <ArrowUpRight size={16} />}
+                                            </div>
+                                            <div>
+                                                <div className="text-sm font-semibold">
+                                                    {tx.type === 'win' || tx.type === 'loss' ? tx.asset : 
+                                                     tx.type === 'deposit' ? 'Пополнение' : 'Вывод'}
+                                                </div>
+                                                <div className="text-xs text-gray-500">{tx.amountUsd}</div>
+                                            </div>
+                                        </div>
+                                        <div className="text-right">
+                                            <div className={`text-sm font-bold ${
+                                                tx.type === 'win' || tx.type === 'deposit' ? 'text-[#00C896]' : 'text-[#FF3B30]'
+                                            }`}>{tx.amount}</div>
+                                            <div className="text-xs text-gray-500">{tx.date}</div>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                )}
             </div>
 
             {/* Deposit Modal */}
             {activeModal === 'deposit' && (
                 <div className="fixed inset-0 z-[100] flex items-end justify-center">
                     <div className="absolute inset-0 bg-black/90 backdrop-blur-sm" onClick={closeModal}></div>
-                    <div className="bg-[#1c1c1e] w-full max-w-lg rounded-t-3xl border-t border-gray-700/50 relative z-10 p-5 pb-8 animate-[slideUp_0.3s_ease-out] max-h-[85vh] overflow-y-auto">
+                    <div className="bg-[#1c1c1e] w-full max-w-lg rounded-t-3xl border-t border-white/10 relative z-10 p-5 pb-8 animate-[slideUp_0.3s_ease-out] max-h-[85vh] overflow-y-auto">
                         <div className="w-10 h-1 bg-gray-700 rounded-full mx-auto mb-4"></div>
                         
                         <div className="flex justify-between items-center mb-4">
                             <h2 className="text-lg font-bold">Пополнение</h2>
-                            <button onClick={closeModal} className="p-2 bg-gray-800/50 rounded-full text-gray-400">
+                            <button onClick={closeModal} className="p-2 bg-[#2c2c2e] rounded-xl text-gray-400 hover:text-white transition-colors border border-white/5">
                                 <X size={18} />
                             </button>
                         </div>
@@ -552,50 +606,53 @@ ${depositData.screenshot ? '📸 Скриншот прикреплен' : '❌ �
                             <div className="space-y-3">
                                 <p className="text-sm text-gray-400 mb-4">Выберите способ пополнения</p>
 
-                                <button onClick={() => setDepositMethod('card')} className="w-full bg-[#2c2c2e] p-4 rounded-xl flex items-center gap-4 hover:bg-[#3a3a3c] transition-colors border border-transparent hover:border-gray-700">
-                                    <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-[#FF6B6B] to-[#FF3B30] flex items-center justify-center">
+                                <button onClick={() => setDepositMethod('card')} className="w-full bg-[#2c2c2e] p-4 rounded-2xl flex items-center gap-4 hover:bg-[#3a3a3c] transition-all border border-white/5 hover:border-white/10 active:scale-[0.98] group">
+                                    <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-[#FF6B6B] to-[#FF3B30] flex items-center justify-center shadow-lg">
                                         <CreditCard size={24} className="text-white" />
                                     </div>
                                     <div className="text-left flex-1">
                                         <div className="font-semibold">Банковская карта</div>
                                         <div className="text-xs text-gray-500">Visa, Mastercard, МИР</div>
                                     </div>
-                                    <div className="text-xs text-gray-500">~5 мин</div>
+                                    <div className="text-xs text-gray-500 bg-[#3a3a3c] px-2 py-1 rounded-lg group-hover:bg-[#4a4a4c] transition-colors">~5 мин</div>
                                 </button>
 
-                                <button onClick={() => setDepositMethod('crypto')} className="w-full bg-[#2c2c2e] p-4 rounded-xl flex items-center gap-4 hover:bg-[#3a3a3c] transition-colors border border-transparent hover:border-gray-700">
-                                    <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-[#F7931A] to-[#FF6B00] flex items-center justify-center">
+                                <button onClick={() => setDepositMethod('crypto')} className="w-full bg-[#2c2c2e] p-4 rounded-2xl flex items-center gap-4 hover:bg-[#3a3a3c] transition-all border border-white/5 hover:border-white/10 active:scale-[0.98] group">
+                                    <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-[#F7931A] to-[#FF6B00] flex items-center justify-center shadow-lg">
                                         <Bitcoin size={24} className="text-white" />
                                     </div>
                                     <div className="text-left flex-1">
                                         <div className="font-semibold">Криптовалюта</div>
                                         <div className="text-xs text-gray-500">BTC, ETH, USDT</div>
                                     </div>
-                                    <div className="text-xs text-gray-500">~10 мин</div>
+                                    <div className="text-xs text-gray-500 bg-[#3a3a3c] px-2 py-1 rounded-lg group-hover:bg-[#4a4a4c] transition-colors">~10 мин</div>
                                 </button>
                             </div>
                         ) : depositMethod === 'crypto' ? (
                             <div className="space-y-4">
-                                <button onClick={() => setDepositMethod(null)} className="text-sm text-[#0098EA] mb-2">← Назад</button>
+                                <button onClick={() => setDepositMethod(null)} className="text-sm text-[#0098EA] mb-2 hover:text-[#0088D1] transition-colors">← Назад</button>
                                 
                                 <div className="text-center">
                                     <div className="text-sm text-gray-400 mb-3">Отправьте USDT (TRC20) на адрес:</div>
                                     
                                     {/* QR Code placeholder */}
-                                    <div className="w-48 h-48 mx-auto bg-white rounded-2xl p-3 mb-4">
+                                    <div className="w-48 h-48 mx-auto bg-white rounded-2xl p-3 mb-4 shadow-lg">
                                         <div className="w-full h-full bg-[url('https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=TN3W4H6rK2ce4vX9YnFQHwKENnHjoxb3m9')] bg-contain bg-center bg-no-repeat"></div>
                                     </div>
                                     
-                                    <div className="bg-[#111113] rounded-xl p-3 flex items-center gap-2">
-                                        <code className="text-xs text-white flex-1 break-all">{cryptoAddresses.USDT}</code>
-                                        <button onClick={() => handleCopy(cryptoAddresses.USDT)} className={`p-2 rounded-lg ${copied ? 'bg-[#00C896]/20 text-[#00C896]' : 'bg-gray-700 text-gray-400'}`}>
+                                    <div className="bg-[#2c2c2e] rounded-2xl p-3 flex items-center gap-2 border border-white/5">
+                                        <code className="text-xs text-white flex-1 break-all font-mono">{cryptoAddresses.USDT}</code>
+                                        <button onClick={() => handleCopy(cryptoAddresses.USDT)} className={`p-2 rounded-xl transition-all ${copied ? 'bg-[#00C896]/20 text-[#00C896]' : 'bg-[#3a3a3c] text-gray-400 hover:text-white'}`}>
                                             {copied ? <Check size={14} /> : <Copy size={14} />}
                                         </button>
                                     </div>
                                 </div>
 
-                                <div className="bg-yellow-500/10 p-3 rounded-xl border border-yellow-500/20 text-xs text-yellow-500">
-                                    ⚠️ Отправляйте только USDT в сети TRC20. Другие токены будут потеряны.
+                                <div className="bg-yellow-500/10 p-4 rounded-2xl border border-yellow-500/20 text-xs text-yellow-500">
+                                    <div className="flex items-start gap-2">
+                                        <AlertCircle size={14} className="mt-0.5 shrink-0" />
+                                        <span>Отправляйте только USDT в сети TRC20. Другие токены будут потеряны.</span>
+                                    </div>
                                 </div>
                             </div>
                         ) : (
@@ -715,10 +772,10 @@ ${depositData.screenshot ? '📸 Скриншот прикреплен' : '❌ �
                                 <button 
                                     onClick={submitDeposit} 
                                     disabled={depositMethod === 'card' && !uploadedScreenshot}
-                                    className={`w-full font-bold py-3.5 rounded-xl active:scale-[0.98] transition-all ${
+                                    className={`w-full font-bold py-3.5 rounded-2xl active:scale-[0.98] transition-all shadow-lg ${
                                         depositMethod === 'card' && !uploadedScreenshot 
                                             ? 'bg-gray-600 text-gray-400 cursor-not-allowed' 
-                                            : 'bg-[#00C896] text-black'
+                                            : 'bg-[#00C896] text-black shadow-[0_4px_20px_rgba(0,200,150,0.2)]'
                                     }`}
                                 >
                                     {depositMethod === 'card' && !uploadedScreenshot 
@@ -736,19 +793,19 @@ ${depositData.screenshot ? '📸 Скриншот прикреплен' : '❌ �
             {activeModal === 'withdraw' && (
                 <div className="fixed inset-0 z-[100] flex items-end justify-center">
                     <div className="absolute inset-0 bg-black/90 backdrop-blur-sm" onClick={closeModal}></div>
-                    <div className="bg-[#1c1c1e] w-full max-w-lg rounded-t-3xl border-t border-gray-700/50 relative z-10 p-5 pb-8 animate-[slideUp_0.3s_ease-out]">
+                    <div className="bg-[#1c1c1e] w-full max-w-lg rounded-t-3xl border-t border-white/10 relative z-10 p-5 pb-8 animate-[slideUp_0.3s_ease-out]">
                         <div className="w-10 h-1 bg-gray-700 rounded-full mx-auto mb-4"></div>
                         
                         <div className="flex justify-between items-center mb-4">
-                            <h2 className="text-lg font-bold">Вывод</h2>
-                            <button onClick={closeModal} className="p-2 bg-gray-800/50 rounded-full text-gray-400">
+                            <h2 className="text-lg font-bold">Вывод средств</h2>
+                            <button onClick={closeModal} className="p-2 bg-[#2c2c2e] rounded-xl text-gray-400 hover:text-white transition-colors border border-white/5">
                                 <X size={18} />
                             </button>
                         </div>
 
                         <div className="space-y-4">
-                            <div className="flex items-center gap-3 bg-[#111113] p-3 rounded-xl border border-gray-800">
-                                <div className="w-9 h-9 rounded-full bg-[#26A17B] flex items-center justify-center">
+                            <div className="flex items-center gap-3 bg-[#2c2c2e] p-4 rounded-2xl border border-white/5">
+                                <div className="w-10 h-10 rounded-xl bg-[#26A17B] flex items-center justify-center">
                                     <UsdtIcon size={20} />
                                 </div>
                                 <div>
@@ -758,24 +815,44 @@ ${depositData.screenshot ? '📸 Скриншот прикреплен' : '❌ �
                             </div>
 
                             <div>
-                                <label className="text-xs text-gray-500 uppercase mb-2 block">Номер карты</label>
-                                <div className="bg-[#111113] rounded-xl p-3 flex items-center border border-gray-800 focus-within:border-[#0098EA]">
-                                    <CreditCard className="text-gray-500 mr-2" size={18} />
-                                    <input type="text" value={withdrawAddress} onChange={e => setWithdrawAddress(e.target.value)} placeholder="0000 0000 0000 0000" className="bg-transparent text-white font-mono outline-none w-full" />
+                                <label className="text-xs text-gray-500 uppercase mb-2 block tracking-wider">Номер карты</label>
+                                <div className="bg-[#2c2c2e] rounded-2xl p-4 flex items-center border border-white/5 focus-within:border-[#0098EA] transition-colors">
+                                    <CreditCard className="text-gray-500 mr-3" size={18} />
+                                    <input 
+                                        type="text" 
+                                        value={withdrawAddress} 
+                                        onChange={e => setWithdrawAddress(e.target.value)} 
+                                        placeholder="0000 0000 0000 0000" 
+                                        className="bg-transparent text-white font-mono outline-none w-full" 
+                                    />
                                 </div>
                             </div>
 
                             <div>
-                                <label className="text-xs text-gray-500 uppercase mb-2 block">Сумма</label>
-                                <div className={`bg-[#111113] rounded-xl p-3 flex items-center border ${withdrawError ? 'border-[#FF3B30]' : 'border-gray-800 focus-within:border-[#0098EA]'}`}>
-                                    <input type="number" placeholder="0.00" className="bg-transparent text-white text-lg font-bold outline-none w-full" value={withdrawAmount} onChange={e => { setWithdrawAmount(e.target.value); setWithdrawError(null); }} />
+                                <label className="text-xs text-gray-500 uppercase mb-2 block tracking-wider">Сумма</label>
+                                <div className={`bg-[#2c2c2e] rounded-2xl p-4 flex items-center border transition-colors ${withdrawError ? 'border-[#FF3B30]' : 'border-white/5 focus-within:border-[#0098EA]'}`}>
+                                    <input 
+                                        type="number" 
+                                        placeholder="0.00" 
+                                        className="bg-transparent text-white text-lg font-bold outline-none w-full" 
+                                        value={withdrawAmount} 
+                                        onChange={e => { setWithdrawAmount(e.target.value); setWithdrawError(null); }} 
+                                    />
                                     <span className="text-gray-500 font-semibold text-sm">USD</span>
                                 </div>
-                                {withdrawError && <div className="flex items-center gap-1 mt-2 text-xs text-[#FF3B30]"><AlertCircle size={12} />{withdrawError}</div>}
-                                <div className="text-xs text-gray-500 mt-1">Комиссия: 1 USDT</div>
+                                {withdrawError && (
+                                    <div className="flex items-center gap-2 mt-2 text-xs text-[#FF3B30] bg-[#FF3B30]/10 p-2 rounded-xl border border-[#FF3B30]/20">
+                                        <AlertCircle size={12} />
+                                        {withdrawError}
+                                    </div>
+                                )}
+                                <div className="text-xs text-gray-500 mt-2">Комиссия: 1 USDT</div>
                             </div>
 
-                            <button onClick={submitWithdraw} className="w-full bg-[#0098EA] text-white font-bold py-3.5 rounded-xl active:scale-[0.98]">
+                            <button 
+                                onClick={submitWithdraw} 
+                                className="w-full bg-[#0098EA] text-white font-bold py-3.5 rounded-2xl active:scale-[0.98] transition-all shadow-[0_4px_20px_rgba(0,152,234,0.2)]"
+                            >
                                 Подтвердить вывод
                             </button>
                         </div>
@@ -787,24 +864,28 @@ ${depositData.screenshot ? '📸 Скриншот прикреплен' : '❌ �
             {activeModal === 'converter' && (
                 <div className="fixed inset-0 z-[100] flex items-center justify-center px-4">
                     <div className="absolute inset-0 bg-black/90 backdrop-blur-sm" onClick={closeModal}></div>
-                    <div className="bg-[#1c1c1e] w-full max-w-sm rounded-3xl border border-gray-700/50 relative z-10 p-5 animate-[scaleIn_0.2s_ease-out]">
-                        <div className="flex justify-between items-center mb-4">
+                    <div className="bg-[#1c1c1e] w-full max-w-sm rounded-3xl border border-white/10 relative z-10 p-6 animate-[scaleIn_0.2s_ease-out]">
+                        <div className="flex justify-between items-center mb-6">
                             <h2 className="text-lg font-bold flex items-center gap-2">
                                 <RefreshCw size={18} className="text-[#0098EA]" />
                                 Конвертер
                             </h2>
-                            <button onClick={closeModal} className="p-2 bg-gray-800/50 rounded-full text-gray-400">
+                            <button onClick={closeModal} className="p-2 bg-[#2c2c2e] rounded-xl text-gray-400 hover:text-white transition-colors border border-white/5">
                                 <X size={18} />
                             </button>
                         </div>
 
-                        <div className="space-y-3">
-                            <div className="bg-[#111113] rounded-xl p-3 border border-gray-800">
-                                <div className="flex justify-between items-center mb-2">
-                                    <span className="text-xs text-gray-500">Отдаю</span>
+                        <div className="space-y-4">
+                            <div className="bg-[#2c2c2e] rounded-2xl p-4 border border-white/5">
+                                <div className="flex justify-between items-center mb-3">
+                                    <span className="text-xs text-gray-500 uppercase tracking-wider">Отдаю</span>
                                     <div className="flex items-center gap-2">
                                         {getCryptoIcon(convertFrom, 16)}
-                                        <select value={convertFrom} onChange={e => setConvertFrom(e.target.value)} className="bg-transparent text-sm font-semibold outline-none">
+                                        <select 
+                                            value={convertFrom} 
+                                            onChange={e => setConvertFrom(e.target.value)} 
+                                            className="bg-transparent text-sm font-semibold outline-none"
+                                        >
                                             <option value="RUB">RUB</option>
                                             <option value="USDT">USDT</option>
                                             <option value="BTC">BTC</option>
@@ -812,21 +893,33 @@ ${depositData.screenshot ? '📸 Скриншот прикреплен' : '❌ �
                                         </select>
                                     </div>
                                 </div>
-                                <input type="number" value={convertAmount} onChange={e => setConvertAmount(e.target.value)} className="w-full bg-transparent text-2xl font-bold outline-none" />
+                                <input 
+                                    type="number" 
+                                    value={convertAmount} 
+                                    onChange={e => setConvertAmount(e.target.value)} 
+                                    className="w-full bg-transparent text-2xl font-bold outline-none" 
+                                />
                             </div>
 
                             <div className="flex justify-center">
-                                <button onClick={() => { const t = convertFrom; setConvertFrom(convertTo); setConvertTo(t); }} className="w-10 h-10 rounded-full bg-[#2c2c2e] flex items-center justify-center text-gray-400 hover:text-white">
+                                <button 
+                                    onClick={() => { const t = convertFrom; setConvertFrom(convertTo); setConvertTo(t); }} 
+                                    className="w-12 h-12 rounded-2xl bg-[#2c2c2e] flex items-center justify-center text-gray-400 hover:text-white transition-all active:scale-95 border border-white/5 hover:border-white/10"
+                                >
                                     <RefreshCw size={18} />
                                 </button>
                             </div>
 
-                            <div className="bg-[#111113] rounded-xl p-3 border border-gray-800">
-                                <div className="flex justify-between items-center mb-2">
-                                    <span className="text-xs text-gray-500">Получаю</span>
+                            <div className="bg-[#2c2c2e] rounded-2xl p-4 border border-white/5">
+                                <div className="flex justify-between items-center mb-3">
+                                    <span className="text-xs text-gray-500 uppercase tracking-wider">Получаю</span>
                                     <div className="flex items-center gap-2">
                                         {getCryptoIcon(convertTo, 16)}
-                                        <select value={convertTo} onChange={e => setConvertTo(e.target.value)} className="bg-transparent text-sm font-semibold outline-none">
+                                        <select 
+                                            value={convertTo} 
+                                            onChange={e => setConvertTo(e.target.value)} 
+                                            className="bg-transparent text-sm font-semibold outline-none"
+                                        >
                                             <option value="USDT">USDT</option>
                                             <option value="RUB">RUB</option>
                                             <option value="BTC">BTC</option>
@@ -837,7 +930,7 @@ ${depositData.screenshot ? '📸 Скриншот прикреплен' : '❌ �
                                 <div className="text-2xl font-bold text-[#00C896]">{getConvertedAmount()}</div>
                             </div>
 
-                            <div className="text-center text-xs text-gray-500">
+                            <div className="text-center text-xs text-gray-500 bg-[#2c2c2e] p-3 rounded-2xl border border-white/5">
                                 Курс: 1 {convertFrom} = {rates[`${convertFrom}_${convertTo}`] || '—'} {convertTo}
                             </div>
                         </div>
@@ -849,7 +942,7 @@ ${depositData.screenshot ? '📸 Скриншот прикреплен' : '❌ �
             {activeModal === 'processing' && (
                 <div className="fixed inset-0 z-[100] flex items-center justify-center px-4">
                     <div className="absolute inset-0 bg-black/90 backdrop-blur-sm"></div>
-                    <div className="bg-[#1c1c1e] w-full max-w-sm rounded-3xl border border-gray-700/50 relative z-10 p-8 animate-[scaleIn_0.2s_ease-out]">
+                    <div className="bg-[#1c1c1e] w-full max-w-sm rounded-3xl border border-white/10 relative z-10 p-8 animate-[scaleIn_0.2s_ease-out]">
                         <div className="flex flex-col items-center text-center">
                             <div className="w-16 h-16 border-4 border-[#0098EA] border-t-transparent rounded-full animate-spin mb-4"></div>
                             <h3 className="text-lg font-bold mb-2">Обработка запроса</h3>
@@ -863,9 +956,9 @@ ${depositData.screenshot ? '📸 Скриншот прикреплен' : '❌ �
             {activeModal === 'withdraw-error' && (
                 <div className="fixed inset-0 z-[100] flex items-center justify-center px-4">
                     <div className="absolute inset-0 bg-black/90 backdrop-blur-sm" onClick={closeModal}></div>
-                    <div className="bg-[#1c1c1e] w-full max-w-sm rounded-3xl border border-gray-700/50 relative z-10 p-6 animate-[scaleIn_0.2s_ease-out]">
+                    <div className="bg-[#1c1c1e] w-full max-w-sm rounded-3xl border border-white/10 relative z-10 p-6 animate-[scaleIn_0.2s_ease-out]">
                         <div className="flex flex-col items-center text-center">
-                            <div className="w-16 h-16 rounded-full bg-[#FF3B30]/20 flex items-center justify-center mb-4">
+                            <div className="w-16 h-16 rounded-2xl bg-[#FF3B30]/15 flex items-center justify-center mb-4 border border-[#FF3B30]/20">
                                 <AlertCircle size={32} className="text-[#FF3B30]" />
                             </div>
                             
@@ -875,7 +968,7 @@ ${depositData.screenshot ? '📸 Скриншот прикреплен' : '❌ �
                                 Вывод средств возможен только на те реквизиты, с которых производилось пополнение счета.
                             </p>
 
-                            <div className="w-full bg-[#111113] rounded-xl p-4 mb-4 border border-gray-800">
+                            <div className="w-full bg-[#2c2c2e] rounded-2xl p-4 mb-4 border border-white/5">
                                 <div className="flex items-start gap-3 text-left">
                                     <AlertCircle size={18} className="text-[#0098EA] mt-0.5 shrink-0" />
                                     <div className="text-xs text-gray-400">
@@ -888,10 +981,10 @@ ${depositData.screenshot ? '📸 Скриншот прикреплен' : '❌ �
                                 Для вывода средств обратитесь в службу поддержки
                             </p>
 
-                            <div className="flex gap-2 w-full">
+                            <div className="flex gap-3 w-full">
                                 <button 
                                     onClick={closeModal}
-                                    className="flex-1 bg-[#2c2c2e] text-white font-semibold py-3 rounded-xl active:scale-[0.98] border border-gray-700"
+                                    className="flex-1 bg-[#2c2c2e] text-white font-semibold py-3 rounded-2xl active:scale-[0.98] border border-white/5 transition-all"
                                 >
                                     Закрыть
                                 </button>
@@ -899,7 +992,7 @@ ${depositData.screenshot ? '📸 Скриншот прикреплен' : '❌ �
                                     href={`https://t.me/${settings.support_username?.replace('@', '')}`}
                                     target="_blank"
                                     rel="noopener noreferrer"
-                                    className="flex-1 bg-[#0098EA] text-white font-semibold py-3 rounded-xl active:scale-[0.98] flex items-center justify-center gap-2"
+                                    className="flex-1 bg-[#0098EA] text-white font-semibold py-3 rounded-2xl active:scale-[0.98] flex items-center justify-center gap-2 transition-all shadow-[0_4px_20px_rgba(0,152,234,0.2)]"
                                 >
                                     Поддержка
                                 </a>
@@ -911,5 +1004,51 @@ ${depositData.screenshot ? '📸 Скриншот прикреплен' : '❌ �
         </div>
     );
 };
+
+const StatsCard = ({ 
+  icon, 
+  title, 
+  value, 
+  subtitle, 
+  color = "text-gray-500"
+}: { 
+  icon: React.ReactNode, 
+  title: string, 
+  value: string, 
+  subtitle: string, 
+  color?: string
+}) => (
+  <div className="bg-[#1c1c1e] p-4 rounded-2xl border border-white/5 hover:border-white/10 transition-colors">
+    <div className="flex items-center gap-3 mb-2">
+      {icon}
+      <div className="font-semibold text-sm text-white">{title}</div>
+    </div>
+    <div className="text-xl font-bold text-white mb-1">{value}</div>
+    <div className={`text-xs font-medium ${color}`}>{subtitle}</div>
+  </div>
+);
+
+const QuickActionCard = ({ 
+  icon, 
+  title, 
+  subtitle, 
+  onClick 
+}: { 
+  icon: React.ReactNode, 
+  title: string, 
+  subtitle: string, 
+  onClick?: () => void
+}) => (
+  <div 
+    onClick={onClick}
+    className="bg-[#1c1c1e] p-4 rounded-2xl border border-white/5 hover:border-white/10 transition-all active:scale-[0.98] cursor-pointer group"
+  >
+    <div className="flex items-center gap-3 mb-2">
+      {icon}
+      <div className="font-semibold text-sm text-white">{title}</div>
+    </div>
+    <div className="text-xs text-gray-500">{subtitle}</div>
+  </div>
+);
 
 export default WalletPage;
