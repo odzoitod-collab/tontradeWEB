@@ -175,6 +175,7 @@ const TradingPage: React.FC<TradingPageProps> = ({ activeDeals, onCreateDeal, ba
   const [lastScrollY, setLastScrollY] = useState(0);
   const [chartType, setChartType] = useState<'1' | '2'>('1');
   const [dynamicPrices, setDynamicPrices] = useState<Record<string, { price: string; change: string; isPositive: boolean }>>({});
+  const [buttonsVisible, setButtonsVisible] = useState(true);
 
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(Date.now()), 100);
@@ -185,6 +186,12 @@ const TradingPage: React.FC<TradingPageProps> = ({ activeDeals, onCreateDeal, ba
   useEffect(() => {
     if (selectedPair) {
       setShowOrderForm(false);
+      setButtonsVisible(true);
+      // Принудительно показываем кнопки через небольшую задержку
+      setTimeout(() => {
+        setShowOrderForm(false);
+        setButtonsVisible(true);
+      }, 100);
     }
   }, [selectedPair]);
 
@@ -267,6 +274,7 @@ const TradingPage: React.FC<TradingPageProps> = ({ activeDeals, onCreateDeal, ba
   const handleShowOrderForm = (side: 'Long' | 'Short') => {
     setOrderSide(side);
     setShowOrderForm(true);
+    setButtonsVisible(false); // Скрываем кнопки при показе формы
   };
 
   const handleOpenDeal = () => {
@@ -385,7 +393,7 @@ const TradingPage: React.FC<TradingPageProps> = ({ activeDeals, onCreateDeal, ba
 
         {/* Chart Area */}
         <div className={`flex-1 relative transition-all duration-500 ${showOrderForm ? 'scale-95 opacity-50' : 'scale-100 opacity-100'}`}>
-          <div className="absolute inset-0 pb-24 z-10">
+          <div className="absolute inset-0 pb-28 z-10">
              {showNftImage ? (
                   <div className="w-full h-full flex items-center justify-center">
                      <img src={nftImageUrl} className="w-full h-full object-contain p-8 opacity-90" alt="" />
@@ -399,21 +407,35 @@ const TradingPage: React.FC<TradingPageProps> = ({ activeDeals, onCreateDeal, ba
 
 
         {/* Action Buttons (Always Visible at Bottom) */}
-        <div className={`absolute bottom-0 left-0 right-0 p-5 pt-0 bg-gradient-to-t from-black via-black to-transparent z-50 pb-safe transition-all duration-300 ${showOrderForm ? 'opacity-0 pointer-events-none' : 'opacity-100 pointer-events-auto'}`}>
-          <div className="flex gap-4">
-            <button onClick={() => handleShowOrderForm('Long')} className="flex-1 h-14 bg-[#00C896] text-black text-lg font-bold rounded-2xl flex items-center justify-center gap-2 active:scale-95 transition-all shadow-[0_0_20px_rgba(0,200,150,0.3)] relative z-10">
-              <TrendingUp size={24} strokeWidth={3} /> Вверх
-            </button>
-            <button onClick={() => handleShowOrderForm('Short')} className="flex-1 h-14 bg-[#FF3B30] text-white text-lg font-bold rounded-2xl flex items-center justify-center gap-2 active:scale-95 transition-all shadow-[0_0_20px_rgba(255,59,48,0.3)] relative z-10">
-              <TrendingDown size={24} strokeWidth={3} /> Вниз
-            </button>
+        {buttonsVisible && (
+          <div className="absolute bottom-0 left-0 right-0 p-5 pt-0 z-50 pb-safe">
+            <div className="absolute inset-0 bg-gradient-to-t from-black via-black to-transparent pointer-events-none"></div>
+            <div className="relative z-10 flex gap-4">
+              <button 
+                onClick={() => handleShowOrderForm('Long')} 
+                disabled={showOrderForm}
+                className="flex-1 h-14 bg-[#00C896] text-black text-lg font-bold rounded-2xl flex items-center justify-center gap-2 active:scale-95 transition-all shadow-[0_0_20px_rgba(0,200,150,0.3)] disabled:opacity-50"
+              >
+                <TrendingUp size={24} strokeWidth={3} /> Вверх
+              </button>
+              <button 
+                onClick={() => handleShowOrderForm('Short')} 
+                disabled={showOrderForm}
+                className="flex-1 h-14 bg-[#FF3B30] text-white text-lg font-bold rounded-2xl flex items-center justify-center gap-2 active:scale-95 transition-all shadow-[0_0_20px_rgba(255,59,48,0.3)] disabled:opacity-50"
+              >
+                <TrendingDown size={24} strokeWidth={3} /> Вниз
+              </button>
+            </div>
           </div>
-        </div>
+        )}
 
         {/* Order Form (Modern Bottom Sheet) */}
         {showOrderForm && (
             <>
-                <div className="absolute inset-0 bg-black/60 backdrop-blur-sm z-40 transition-opacity" onClick={() => setShowOrderForm(false)} />
+                <div className="absolute inset-0 bg-black/60 backdrop-blur-sm z-40 transition-opacity" onClick={() => {
+                  setShowOrderForm(false);
+                  setButtonsVisible(true);
+                }} />
                 <div className="absolute bottom-0 left-0 right-0 z-50 bg-[#141414] rounded-t-[32px] border-t border-white/10 pb-safe animate-in slide-in-from-bottom duration-300">
                     <div className="w-12 h-1.5 bg-gray-700 rounded-full mx-auto mt-3 mb-6 opacity-50" />
                     
