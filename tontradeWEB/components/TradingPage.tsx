@@ -285,6 +285,7 @@ const TradingPage: React.FC<TradingPageProps> = ({ activeDeals, onCreateDeal, ba
     setSelectedPair(null);
     setShowOrderForm(false);
     setViewMode('deals');
+    onNavigationChange?.(false); // Показываем навигацию при переходе к сделкам
   };
 
   const formatTime = (s: number) => s <= 0 ? '0:00' : `${Math.floor(s/60)}:${(s%60).toString().padStart(2,'0')}`;
@@ -391,18 +392,16 @@ const TradingPage: React.FC<TradingPageProps> = ({ activeDeals, onCreateDeal, ba
 
 
         {/* Action Buttons (Always Visible at Bottom) */}
-        {!showOrderForm && (
-          <div className="absolute bottom-0 left-0 right-0 p-5 pt-0 bg-gradient-to-t from-black via-black to-transparent z-30 pb-safe">
-            <div className="flex gap-4">
-              <button onClick={() => handleShowOrderForm('Long')} className="flex-1 h-14 bg-[#00C896] text-black text-lg font-bold rounded-2xl flex items-center justify-center gap-2 active:scale-95 transition-all shadow-[0_0_20px_rgba(0,200,150,0.3)]">
-                <TrendingUp size={24} strokeWidth={3} /> Вверх
-              </button>
-              <button onClick={() => handleShowOrderForm('Short')} className="flex-1 h-14 bg-[#FF3B30] text-white text-lg font-bold rounded-2xl flex items-center justify-center gap-2 active:scale-95 transition-all shadow-[0_0_20px_rgba(255,59,48,0.3)]">
-                <TrendingDown size={24} strokeWidth={3} /> Вниз
-              </button>
-            </div>
+        <div className={`absolute bottom-0 left-0 right-0 p-5 pt-0 bg-gradient-to-t from-black via-black to-transparent z-30 pb-safe transition-all duration-300 ${showOrderForm ? 'opacity-0 pointer-events-none' : 'opacity-100 pointer-events-auto'}`}>
+          <div className="flex gap-4">
+            <button onClick={() => handleShowOrderForm('Long')} className="flex-1 h-14 bg-[#00C896] text-black text-lg font-bold rounded-2xl flex items-center justify-center gap-2 active:scale-95 transition-all shadow-[0_0_20px_rgba(0,200,150,0.3)]">
+              <TrendingUp size={24} strokeWidth={3} /> Вверх
+            </button>
+            <button onClick={() => handleShowOrderForm('Short')} className="flex-1 h-14 bg-[#FF3B30] text-white text-lg font-bold rounded-2xl flex items-center justify-center gap-2 active:scale-95 transition-all shadow-[0_0_20px_rgba(255,59,48,0.3)]">
+              <TrendingDown size={24} strokeWidth={3} /> Вниз
+            </button>
           </div>
-        )}
+        </div>
 
         {/* Order Form (Modern Bottom Sheet) */}
         {showOrderForm && (
