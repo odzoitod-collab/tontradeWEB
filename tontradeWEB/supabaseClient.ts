@@ -13,4 +13,10 @@ const BOT_WEBHOOK_URL = "8080";
 // 🔑 OTHER KEYS
 const GEMINI_API_KEY = "PLACEHOLDER_API_KEY";
 
-export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+  realtime: {
+    params: {
+      eventsPerSecond: 10,
+    },
+  },
+});

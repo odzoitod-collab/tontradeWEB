@@ -95,4 +95,5 @@ export interface CryptoPair {
   Icon?: React.FC<any>;
   color?: string;
   letter?: string;
+  category?: 'crypto' | 'stocks' | 'nft' | 'commodities';
 }

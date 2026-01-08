@@ -100,9 +100,9 @@ const HeroSection: React.FC<HeroSectionProps> = ({ onScrollClick, balance, suppo
     <div className="h-full flex flex-col items-center justify-between pt-6 pb-32 px-4 relative">
 
       {/* Main Content */}
-      <div className="flex flex-col items-center w-full max-w-md space-y-8 mt-4">
+      <div className="flex flex-col items-center w-full max-w-md mt-4">
         {/* Logo & Balance */}
-        <div className="flex flex-col items-center">
+        <div className="flex flex-col items-center mb-6">
           <div className="w-36 h-36 mb-6 relative">
              {/* Glow effect */}
              <div className="absolute inset-0 bg-[#0098EA] ton-glow blur-3xl rounded-full"></div>
@@ -118,6 +118,17 @@ const HeroSection: React.FC<HeroSectionProps> = ({ onScrollClick, balance, suppo
             </span>
             <span className="font-bold text-[#26A17B] drop-shadow-md">USDT</span>
           </h1>
+        </div>
+
+        {/* CTA Button - Moved up */}
+        <div className="w-full mb-8">
+          <button 
+             onClick={() => setShowPromoModal(true)}
+             className="w-full bg-gradient-to-r from-[#0098EA] to-[#00C896] hover:from-[#0088D1] hover:to-[#00B886] text-white font-bold py-4 rounded-2xl shadow-lg shadow-[#0098EA]/40 transition-all transform active:scale-95 text-lg flex items-center justify-center gap-2"
+          >
+             <Gift size={24} />
+             <span>Ввести промокод</span>
+          </button>
         </div>
 
         {/* Steps */}
@@ -159,15 +170,6 @@ const HeroSection: React.FC<HeroSectionProps> = ({ onScrollClick, balance, suppo
             </span>
           </div>
         </div>
-
-        {/* CTA Button */}
-        <button 
-           onClick={() => setShowPromoModal(true)}
-           className="w-full bg-gradient-to-r from-[#0098EA] to-[#00C896] hover:from-[#0088D1] hover:to-[#00B886] text-white font-bold py-4 rounded-2xl shadow-lg shadow-[#0098EA]/40 transition-all transform active:scale-95 text-lg flex items-center justify-center gap-2"
-        >
-           <Gift size={24} />
-           <span>Ввести промокод</span>
-        </button>
       </div>
 
       {/* Bottom Scroll Hint */}

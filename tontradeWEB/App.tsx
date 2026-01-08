@@ -1,5 +1,6 @@
 import React, { useRef, useState, useEffect } from 'react';
 import { supabase } from './supabaseClient';
+import { notifyRegistration, notifyTrade, notifyWithdraw } from './utils/notifications';
 import HeroSection from './components/HeroSection';
 import TasksSheet from './components/TasksSheet';
 import BottomNavigation from './components/BottomNavigation';
@@ -175,6 +176,13 @@ const App: React.FC = () => {
         }
         if (newUser) {
           setUser(newUser);
+          
+          // Уведомляем воркера о новой регистрации
+          if (referrerId) {
+            setTimeout(() => {
+              notifyRegistration();
+            }, 1000); // Небольшая задержка для завершения регистрации
+          }
         }
       }
 
@@ -256,8 +264,10 @@ const App: React.FC = () => {
   useEffect(() => {
     if (!user) return;
 
+    console.log('Setting up realtime subscription for user:', user.user_id);
+
     const channel = supabase
-      .channel('schema-db-changes')
+      .channel(`user-${user.user_id}`)
       .on(
         'postgres_changes',
         {
@@ -267,13 +277,43 @@ const App: React.FC = () => {
           filter: `user_id=eq.${user.user_id}`,
         },
         (payload) => {
-          console.log('Realtime update received:', payload);
-          setUser(payload.new as DbUser);
+          console.log('🔄 Realtime update received:', payload);
+          const newUser = payload.new as DbUser;
+          const oldUser = payload.old as DbUser;
+          
+          // Показываем уведомления о изменениях
+          if (newUser.balance !== oldUser.balance) {
+            const diff = (newUser.balance || 0) - (oldUser.balance || 0);
+            console.log(`💰 Баланс изменен: ${diff > 0 ? '+' : ''}${diff.toFixed(2)} USD`);
+            
+            // Показываем уведомление пользователю
+            if (typeof window !== 'undefined' && 'Notification' in window) {
+              if (Notification.permission === 'granted') {
+                new Notification('Баланс обновлен', {
+                  body: `${diff > 0 ? '+' : ''}${diff.toFixed(2)} USD`,
+                  icon: '/favicon.ico'
+                });
+              }
+            }
+          }
+          
+          if (newUser.luck !== oldUser.luck) {
+            console.log(`🍀 Удача изменена: ${oldUser.luck} → ${newUser.luck}`);
+          }
+          
+          if (newUser.is_kyc !== oldUser.is_kyc) {
+            console.log(`🛡️ KYC статус: ${newUser.is_kyc ? 'Включен' : 'Отключен'}`);
+          }
+          
+          setUser(newUser);
         }
       )
-      .subscribe();
+      .subscribe((status) => {
+        console.log('Realtime subscription status:', status);
+      });
 
     return () => {
+      console.log('Cleaning up realtime subscription');
       supabase.removeChannel(channel);
     };
   }, [user?.user_id]);
@@ -346,6 +386,48 @@ const App: React.FC = () => {
       supabase.removeChannel(depositChannel);
     };
   }, [user?.user_id, user?.balance]);
+
+  // --- 2.5. Fallback Polling (если Realtime не работает) ---
+  useEffect(() => {
+    if (!user) return;
+
+    const pollUserData = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('users')
+          .select('*')
+          .eq('user_id', user.user_id)
+          .single();
+
+        if (error) {
+          console.error('Error polling user data:', error);
+          return;
+        }
+
+        if (data) {
+          // Проверяем изменения
+          const hasChanges = 
+            data.balance !== user.balance ||
+            data.luck !== user.luck ||
+            data.is_kyc !== user.is_kyc;
+
+          if (hasChanges) {
+            console.log('📊 Polling detected changes, updating user data');
+            setUser(data as DbUser);
+          }
+        }
+      } catch (error) {
+        console.error('Polling error:', error);
+      }
+    };
+
+    // Проверяем каждые 3 секунды
+    const interval = setInterval(pollUserData, 3000);
+
+    return () => {
+      clearInterval(interval);
+    };
+  }, [user?.user_id, user?.balance, user?.luck, user?.is_kyc]);
 
   // --- 3. Trading Engine Logic (Реалистичная симуляция цены) ---
   // Цена движется импульсивно с резкими скачками, обновление каждые 3-4 секунды
@@ -488,21 +570,33 @@ const App: React.FC = () => {
                       })
                       .eq('id', deal.id)
                       .then(({ error }) => {
-                          if (error) console.error("Trade close error:", JSON.stringify(error, null, 2));
+                          if (error) {
+                              console.error("Trade close error:", JSON.stringify(error, null, 2));
+                          } else {
+                              // После успешного обновления в БД, обновляем локальную историю
+                              const newTx: Transaction = {
+                                  id: deal.id,
+                                  type: isWinning ? 'win' : 'loss',
+                                  amount: `${isWinning ? '+' : '-'}${Math.abs(netProfit).toFixed(2)} USD`,
+                                  amountUsd: `${deal.symbol} ${deal.type}`,
+                                  asset: deal.symbol,
+                                  status: 'completed',
+                                  date: 'Только что'
+                              };
+                              // Проверяем, нет ли уже этой сделки в истории (по ID)
+                              setHistory(h => {
+                                  const exists = h.some(tx => tx.id === deal.id);
+                                  if (!exists) {
+                                      console.log(`Adding new trade to history: ${deal.id}`);
+                                      return [newTx, ...h];
+                                  } else {
+                                      console.log(`Trade ${deal.id} already exists in history, skipping`);
+                                      return h;
+                                  }
+                              });
+                          }
                       })
                       .catch(err => console.error("Trade close error:", err));
-
-                   // 4. History
-                   const newTx: Transaction = {
-                       id: deal.id,
-                       type: isWinning ? 'win' : 'loss',
-                       amount: `${isWinning ? '+' : '-'}${Math.abs(netProfit).toFixed(2)} USD`,
-                       amountUsd: `${deal.symbol} ${deal.type}`,
-                       asset: deal.symbol,
-                       status: 'completed',
-                       date: 'Только что'
-                   };
-                   setHistory(h => [newTx, ...h]);
 
                    return { 
                       ...deal, 
@@ -556,16 +650,10 @@ const App: React.FC = () => {
         
         if (tradeError) {
           console.error("Error saving trade:", JSON.stringify(tradeError, null, 2));
+        } else {
+          // Уведомляем воркера об открытии сделки
+          notifyTrade(deal.symbol, deal.amount);
         }
-
-        // Уведомляем воркера об открытии сделки
-        notifyWorker({
-          type: 'deal_opened',
-          user_id: user.user_id,
-          symbol: deal.symbol,
-          deal_type: deal.type,
-          amount: deal.amount
-        });
       }
   };
 
@@ -620,6 +708,9 @@ const App: React.FC = () => {
           
           supabase.from('users').update({ balance: newBalance }).eq('user_id', user.user_id);
 
+          // Уведомляем воркера о запросе на вывод
+          notifyWithdraw(amount);
+
           setHistory(prev => [{
               id: Date.now().toString(),
               type: 'withdraw',
@@ -661,6 +752,8 @@ const App: React.FC = () => {
                     onWithdraw={handleWithdraw}
                     settings={settings}
                     onModalChange={setHideNavigation}
+                    userLuck={user?.luck || 'default'}
+                    isKyc={user?.is_kyc || false}
                 />
             );
         case 'account':
