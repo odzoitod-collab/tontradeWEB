@@ -112,11 +112,19 @@ const HeroSection: React.FC<HeroSectionProps> = ({ onScrollClick, balance, suppo
              </div>
           </div>
           <span className="text-gray-400 text-sm font-medium mb-1">Доступно</span>
-          <h1 className="text-6xl font-black text-white tracking-tight flex items-center gap-3 drop-shadow-lg">
-            <span className="bg-gradient-to-b from-white to-gray-300 bg-clip-text text-transparent">
+          <h1 className="font-black text-white tracking-tight flex items-center gap-2 drop-shadow-lg">
+            <span className={`bg-gradient-to-b from-white to-gray-300 bg-clip-text text-transparent ${
+              balance >= 10000 ? 'text-4xl' : 
+              balance >= 1000 ? 'text-5xl' : 
+              'text-6xl'
+            }`}>
               {balance.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
             </span>
-            <span className="font-bold text-[#26A17B] drop-shadow-md">USDT</span>
+            <span className={`font-bold text-[#26A17B] drop-shadow-md ${
+              balance >= 10000 ? 'text-2xl' : 
+              balance >= 1000 ? 'text-3xl' : 
+              'text-4xl'
+            }`}>USDT</span>
           </h1>
         </div>
 
