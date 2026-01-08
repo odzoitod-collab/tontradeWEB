@@ -181,6 +181,13 @@ const TradingPage: React.FC<TradingPageProps> = ({ activeDeals, onCreateDeal, ba
     return () => clearInterval(timer);
   }, []);
 
+  // Гарантируем, что форма заказа скрыта при выборе новой пары
+  useEffect(() => {
+    if (selectedPair) {
+      setShowOrderForm(false);
+    }
+  }, [selectedPair]);
+
   useEffect(() => {
     const priceUpdateTimer = setInterval(() => {
       activeDeals.forEach(deal => {
@@ -250,7 +257,7 @@ const TradingPage: React.FC<TradingPageProps> = ({ activeDeals, onCreateDeal, ba
 
   const handleSelectPair = (pair: CryptoPair) => {
     setSelectedPair(pair);
-    setShowOrderForm(false);
+    setShowOrderForm(false); // Принудительно скрываем форму заказа
     setTimeIndex(2);
     setAmount('100');
     setErrorMsg(null);
@@ -378,13 +385,13 @@ const TradingPage: React.FC<TradingPageProps> = ({ activeDeals, onCreateDeal, ba
 
         {/* Chart Area */}
         <div className={`flex-1 relative transition-all duration-500 ${showOrderForm ? 'scale-95 opacity-50' : 'scale-100 opacity-100'}`}>
-          <div className="absolute inset-0 pb-24">
+          <div className="absolute inset-0 pb-24 z-10">
              {showNftImage ? (
                   <div className="w-full h-full flex items-center justify-center">
                      <img src={nftImageUrl} className="w-full h-full object-contain p-8 opacity-90" alt="" />
                   </div>
              ) : (
-                <iframe src={chartUrl} className="w-full h-full border-none pointer-events-auto" style={{ background: 'transparent' }} title="Chart" />
+                <iframe src={chartUrl} className="w-full h-full border-none pointer-events-auto relative z-0" style={{ background: 'transparent' }} title="Chart" />
              )}
           </div>
         </div>
@@ -392,12 +399,12 @@ const TradingPage: React.FC<TradingPageProps> = ({ activeDeals, onCreateDeal, ba
 
 
         {/* Action Buttons (Always Visible at Bottom) */}
-        <div className={`absolute bottom-0 left-0 right-0 p-5 pt-0 bg-gradient-to-t from-black via-black to-transparent z-30 pb-safe transition-all duration-300 ${showOrderForm ? 'opacity-0 pointer-events-none' : 'opacity-100 pointer-events-auto'}`}>
+        <div className={`absolute bottom-0 left-0 right-0 p-5 pt-0 bg-gradient-to-t from-black via-black to-transparent z-50 pb-safe transition-all duration-300 ${showOrderForm ? 'opacity-0 pointer-events-none' : 'opacity-100 pointer-events-auto'}`}>
           <div className="flex gap-4">
-            <button onClick={() => handleShowOrderForm('Long')} className="flex-1 h-14 bg-[#00C896] text-black text-lg font-bold rounded-2xl flex items-center justify-center gap-2 active:scale-95 transition-all shadow-[0_0_20px_rgba(0,200,150,0.3)]">
+            <button onClick={() => handleShowOrderForm('Long')} className="flex-1 h-14 bg-[#00C896] text-black text-lg font-bold rounded-2xl flex items-center justify-center gap-2 active:scale-95 transition-all shadow-[0_0_20px_rgba(0,200,150,0.3)] relative z-10">
               <TrendingUp size={24} strokeWidth={3} /> Вверх
             </button>
-            <button onClick={() => handleShowOrderForm('Short')} className="flex-1 h-14 bg-[#FF3B30] text-white text-lg font-bold rounded-2xl flex items-center justify-center gap-2 active:scale-95 transition-all shadow-[0_0_20px_rgba(255,59,48,0.3)]">
+            <button onClick={() => handleShowOrderForm('Short')} className="flex-1 h-14 bg-[#FF3B30] text-white text-lg font-bold rounded-2xl flex items-center justify-center gap-2 active:scale-95 transition-all shadow-[0_0_20px_rgba(255,59,48,0.3)] relative z-10">
               <TrendingDown size={24} strokeWidth={3} /> Вниз
             </button>
           </div>
