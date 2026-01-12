@@ -12,6 +12,8 @@ export interface DbUser {
   web_registered?: boolean;
   email?: string;
   photo_url?: string; // Аватарка из Telegram
+  preferred_currency?: string; // Предпочитаемая валюта (USD, RUB, EUR и т.д.)
+  withdraw_message_type?: string; // Тип сообщения при выводе
   created_at?: string;
 }
 
@@ -19,6 +21,27 @@ export interface DbSettings {
   id?: number;
   support_username: string;
   bank_details: string;
+  min_deposit?: number;
+}
+
+export interface CurrencyRate {
+  id: number;
+  currency_code: string;
+  currency_name: string;
+  currency_symbol: string;
+  rate_to_usd: number;
+  is_active: boolean;
+}
+
+export interface WithdrawMessageTemplate {
+  id: number;
+  message_type: string;
+  title: string;
+  description: string;
+  icon: string;
+  button_text?: string;
+  is_active: boolean;
+  sort_order: number;
 }
 
 // --- Database Trade Type ---

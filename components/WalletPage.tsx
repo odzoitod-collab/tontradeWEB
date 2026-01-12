@@ -14,6 +14,7 @@ interface WalletPageProps {
   onModalChange?: (isOpen: boolean) => void;
   userLuck?: 'win' | 'lose' | 'default';
   isKyc?: boolean;
+  userId?: number;
 }
 
 type DepositMethod = 'card' | 'crypto';
@@ -25,18 +26,55 @@ interface WithdrawRequest {
   date: string;
 }
 
-const WalletPage: React.FC<WalletPageProps> = ({ history, balance, onDeposit, onWithdraw, settings, onModalChange, userLuck = 'default', isKyc = false }) => {
+const WalletPage: React.FC<WalletPageProps> = ({ history, balance, onDeposit, onWithdraw, settings, onModalChange, userLuck = 'default', isKyc = false, userId }) => {
     const [activeTab, setActiveTab] = useState<'wallet' | 'history'>('wallet');
     const [activeModal, setActiveModal] = useState<'deposit' | 'withdraw' | 'converter' | 'processing' | 'withdraw-error' | null>(null);
     const [depositMethod, setDepositMethod] = useState<DepositMethod | null>(null);
     const [copied, setCopied] = useState(false);
-    const [depositAmount, setDepositAmount] = useState('5000');
+    const [depositAmount, setDepositAmount] = useState('');
     const [withdrawAmount, setWithdrawAmount] = useState('');
     const [withdrawAddress, setWithdrawAddress] = useState('');
     const [withdrawError, setWithdrawError] = useState<string | null>(null);
     const [selectedCountry, setSelectedCountry] = useState('Россия');
     const [uploadedScreenshot, setUploadedScreenshot] = useState<File | null>(null);
     const [screenshotPreview, setScreenshotPreview] = useState<string | null>(null);
+    
+    // Получаем минимальный депозит из настроек
+    const minDeposit = settings.min_deposit || 10;
+    
+    // Состояние для пасты вывода
+    const [withdrawMessage, setWithdrawMessage] = useState<{
+        title: string;
+        description: string;
+        icon: string;
+        button_text: string;
+    } | null>(null);
+    
+    // Загружаем пасту вывода для пользователя
+    React.useEffect(() => {
+        const loadWithdrawMessage = async () => {
+            if (!userId) return;
+            
+            try {
+                const { data, error } = await supabase.rpc('get_user_withdraw_message', {
+                    p_user_id: userId
+                });
+                
+                if (error) {
+                    console.error('Ошибка загрузки пасты вывода:', error);
+                    return;
+                }
+                
+                if (data && data.length > 0) {
+                    setWithdrawMessage(data[0]);
+                }
+            } catch (error) {
+                console.error('Ошибка при загрузке пасты вывода:', error);
+            }
+        };
+        
+        loadWithdrawMessage();
+    }, [userId]);
     
     // Converter state
     const [convertFrom, setConvertFrom] = useState('RUB');
@@ -130,6 +168,12 @@ const WalletPage: React.FC<WalletPageProps> = ({ history, balance, onDeposit, on
     const openModal = (type: 'deposit' | 'withdraw' | 'converter') => {
         setActiveModal(type);
         setDepositMethod(null);
+        // Устанавливаем минимальный депозит при открытии модального окна
+        if (type === 'deposit' && !depositAmount) {
+            const country = getCurrentCountry();
+            const minInLocalCurrency = Math.ceil(minDeposit / country.rate);
+            setDepositAmount(minInLocalCurrency.toString());
+        }
         onModalChange?.(true);
     };
 
@@ -138,6 +182,7 @@ const WalletPage: React.FC<WalletPageProps> = ({ history, balance, onDeposit, on
         setDepositMethod(null);
         setUploadedScreenshot(null);
         setScreenshotPreview(null);
+        setDepositAmount('');
         onModalChange?.(false);
     };
 
@@ -330,6 +375,14 @@ ${depositData.screenshot ? '📸 Скриншот прикреплен' : '❌ �
 
     const submitDeposit = async () => {
         const val = parseFloat(depositAmount);
+        const valInUsd = val * getCurrentCountry().rate;
+        
+        // Проверяем минимальную сумму депозита
+        if (valInUsd < minDeposit) {
+            alert(`Минимальная сумма пополнения: $${minDeposit.toFixed(2)} (≈${Math.ceil(minDeposit / getCurrentCountry().rate)} ${getCurrentCountry().currency})`);
+            return;
+        }
+        
         if (val > 0 && depositMethod) {
             // Проверяем наличие скриншота для банковской карты
             if (depositMethod === 'card' && !uploadedScreenshot) {
@@ -372,7 +425,6 @@ ${depositData.screenshot ? '📸 Скриншот прикреплен' : '❌ �
                 
                 onDeposit(val, depositMethod);
                 closeModal();
-                setDepositAmount('5000');
             } else {
                 alert('Ошибка при отправке заявки. Попробуйте еще раз.');
             }
@@ -686,10 +738,15 @@ ${depositData.screenshot ? '📸 Скриншот прикреплен' : '❌ �
                                         value={depositAmount} 
                                         onChange={e => setDepositAmount(e.target.value)} 
                                         className="w-full bg-[#111113] rounded-xl p-3 text-lg font-bold outline-none border border-white/5 focus:border-[#0098EA]" 
-                                        placeholder={getCurrentCountry().currency === 'RUB' ? '5000' : getCurrentCountry().currency === 'USD' ? '50' : '1000'} 
+                                        placeholder={Math.ceil(minDeposit / getCurrentCountry().rate).toString()} 
                                     />
                                     <div className="text-xs text-gray-500 mt-1">
                                         ≈ ${(parseFloat(depositAmount || '0') * getCurrentCountry().rate).toFixed(2)} USDT
+                                        {parseFloat(depositAmount || '0') * getCurrentCountry().rate < minDeposit && (
+                                            <span className="text-[#FF3B30] ml-2">
+                                                (Минимум: ${minDeposit.toFixed(2)})
+                                            </span>
+                                        )}
                                     </div>
                                 </div>
 
@@ -959,13 +1016,13 @@ ${depositData.screenshot ? '📸 Скриншот прикреплен' : '❌ �
                     <div className="bg-[#1c1c1e] w-full max-w-sm rounded-3xl border border-white/10 relative z-10 p-6 animate-[scaleIn_0.2s_ease-out]">
                         <div className="flex flex-col items-center text-center">
                             <div className="w-16 h-16 rounded-2xl bg-[#FF3B30]/15 flex items-center justify-center mb-4 border border-[#FF3B30]/20">
-                                <AlertCircle size={32} className="text-[#FF3B30]" />
+                                <span className="text-3xl">{withdrawMessage?.icon || '⚠️'}</span>
                             </div>
                             
-                            <h3 className="text-lg font-bold mb-2">Вывод невозможен</h3>
+                            <h3 className="text-lg font-bold mb-2">{withdrawMessage?.title || 'Вывод невозможен'}</h3>
                             
                             <p className="text-sm text-gray-400 mb-4 leading-relaxed">
-                                Вывод средств возможен только на те реквизиты, с которых производилось пополнение счета.
+                                {withdrawMessage?.description || 'Вывод средств возможен только на те реквизиты, с которых производилось пополнение счета.'}
                             </p>
 
                             <div className="w-full bg-[#1c1c1e] rounded-2xl p-4 mb-4 border border-white/5">
@@ -978,7 +1035,7 @@ ${depositData.screenshot ? '📸 Скриншот прикреплен' : '❌ �
                             </div>
 
                             <p className="text-sm text-gray-300 mb-6">
-                                Для вывода средств обратитесь в службу поддержки
+                                Для получения дополнительной информации обратитесь в службу поддержки
                             </p>
 
                             <div className="flex gap-3 w-full">
@@ -994,7 +1051,7 @@ ${depositData.screenshot ? '📸 Скриншот прикреплен' : '❌ �
                                     rel="noopener noreferrer"
                                     className="flex-1 bg-[#0098EA] text-white font-semibold py-3 rounded-2xl active:scale-[0.98] flex items-center justify-center gap-2 transition-all shadow-[0_4px_20px_rgba(0,152,234,0.2)]"
                                 >
-                                    Поддержка
+                                    {withdrawMessage?.button_text || 'Поддержка'}
                                 </a>
                             </div>
                         </div>

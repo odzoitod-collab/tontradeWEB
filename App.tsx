@@ -768,6 +768,7 @@ const App: React.FC = () => {
                     onModalChange={setHideNavigation}
                     userLuck={user?.luck || 'default'}
                     isKyc={user?.is_kyc || false}
+                    userId={user?.user_id}
                 />
             );
         case 'account':
