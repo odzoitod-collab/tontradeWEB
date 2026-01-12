@@ -1,14 +1,16 @@
 import React, { useState, useCallback } from 'react';
-import { User, Shield, Globe, Bell, ChevronRight, BadgeCheck, Headset, ShieldCheck, MessageCircle, LogOut, Copy, Check, Settings, Star, Zap, X, Upload, Minimize2, Maximize2 } from 'lucide-react';
+import { User, Shield, Globe, Bell, ChevronRight, BadgeCheck, Headset, ShieldCheck, MessageCircle, LogOut, Copy, Check, Settings, Star, Zap, X, Upload, Minimize2, Maximize2, Play, ToggleLeft, ToggleRight } from 'lucide-react';
 import { supabase } from '../supabaseClient';
 import type { DbUser, DbSettings } from '../types';
 
 interface AccountPageProps {
   user: DbUser | null;
   settings: DbSettings;
+  isDemoMode?: boolean;
+  onDemoModeChange?: (enabled: boolean) => void;
 }
 
-const AccountPage: React.FC<AccountPageProps> = ({ user, settings }) => {
+const AccountPage: React.FC<AccountPageProps> = ({ user, settings, isDemoMode = false, onDemoModeChange }) => {
   const [activeTab, setActiveTab] = useState<'profile' | 'settings'>('profile');
   const [showVerifyModal, setShowVerifyModal] = useState(false);
   const [showSecurityModal, setShowSecurityModal] = useState(false);
@@ -366,6 +368,46 @@ ${kycData.documentPhoto ? '📸 Документ прикреплен' : '❌ Д
 
         {activeTab === 'settings' && (
           <div className="space-y-2">
+            {/* Demo Mode Toggle */}
+            <div 
+              onClick={() => onDemoModeChange?.(!isDemoMode)}
+              className={`p-4 rounded-2xl flex items-center justify-between active:scale-[0.98] transition-all cursor-pointer border ${
+                isDemoMode 
+                  ? 'bg-[#0098EA]/10 border-[#0098EA]/30' 
+                  : 'bg-[#1c1c1e] border-white/5 hover:border-white/10'
+              }`}
+            >
+              <div className="flex items-center gap-3">
+                <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
+                  isDemoMode ? 'bg-[#0098EA]/20' : 'bg-[#1c1c1e]'
+                }`}>
+                  <Play size={20} className={isDemoMode ? 'text-[#0098EA]' : 'text-gray-400'} />
+                </div>
+                <div>
+                  <span className="font-medium block">Демо режим</span>
+                  <span className="text-xs text-gray-500">
+                    {isDemoMode ? 'Торговля с виртуальными $100' : 'Попробуйте без риска'}
+                  </span>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                {isDemoMode ? (
+                  <ToggleRight size={28} className="text-[#0098EA]" />
+                ) : (
+                  <ToggleLeft size={28} className="text-gray-500" />
+                )}
+              </div>
+            </div>
+
+            {isDemoMode && (
+              <div className="bg-[#0098EA]/10 border border-[#0098EA]/20 rounded-xl p-3 flex items-start gap-2">
+                <Play size={16} className="text-[#0098EA] mt-0.5 shrink-0" />
+                <div className="text-xs text-[#0098EA]">
+                  <span className="font-semibold">Демо режим активен.</span> Вы торгуете виртуальными средствами. Пополнение и вывод недоступны.
+                </div>
+              </div>
+            )}
+
             <MenuItem 
               icon={<Bell size={20} className="text-purple-400" />} 
               label="Уведомления" 

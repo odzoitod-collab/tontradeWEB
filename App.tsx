@@ -1,6 +1,7 @@
 import React, { useRef, useState, useEffect, useMemo, useCallback } from 'react';
 import { supabase } from './supabaseClient';
-import { notifyRegistration, notifyTrade, notifyWithdraw } from './utils/notifications';
+import { notifyRegistration, notifyTrade, notifyWithdraw, showDealResultNotification, notifyDealResult } from './utils/notifications';
+import { DEFAULT_CURRENCY } from './utils/currency';
 import HeroSection from './components/HeroSection';
 import TasksSheet from './components/TasksSheet';
 import BottomNavigation from './components/BottomNavigation';
@@ -57,6 +58,12 @@ const App: React.FC = () => {
   const [currentTab, setCurrentTab] = useState('home');
   const [hideNavigation, setHideNavigation] = useState(false);
   
+  // --- Demo Mode State ---
+  const [isDemoMode, setIsDemoMode] = useState(false);
+  const [demoBalance, setDemoBalance] = useState(100); // $100 демо баланс
+  const [demoDeals, setDemoDeals] = useState<ActiveDeal[]>([]);
+  const [demoHistory, setDemoHistory] = useState<Transaction[]>([]);
+  
   // --- Global State from DB ---
   const [user, setUser] = useState<DbUser | null>(null);
   const [settings, setSettings] = useState<DbSettings>({ 
@@ -85,6 +92,25 @@ const App: React.FC = () => {
     setCurrentTab(tab);
     setHideNavigation(false); // Всегда показываем навигацию при смене вкладки
   }, []);
+
+  // --- Demo Mode Toggle ---
+  const toggleDemoMode = useCallback((enabled: boolean) => {
+    setIsDemoMode(enabled);
+    if (enabled) {
+      // Сбрасываем демо данные при включении
+      setDemoBalance(100);
+      setDemoDeals([]);
+      setDemoHistory([]);
+    }
+  }, []);
+
+  // --- Demo Mode Deal Handler ---
+  const handleCreateDemoDeal = useCallback((deal: ActiveDeal) => {
+    if (demoBalance >= deal.amount) {
+      setDemoBalance(prev => prev - deal.amount);
+      setDemoDeals(prev => [deal, ...prev]);
+    }
+  }, [demoBalance]);
 
   // --- 1. Auth & Initial Data Fetch ---
   useEffect(() => {
@@ -170,7 +196,9 @@ const App: React.FC = () => {
             balance: 0, 
             luck: 'default',
             is_kyc: false,
-            web_registered: true, // Mark as Web App registration
+            web_registered: true,
+            preferred_currency: DEFAULT_CURRENCY, // RUB по умолчанию
+            notifications_enabled: true,
             email: '-'
           }])
           .select()
@@ -584,6 +612,12 @@ const App: React.FC = () => {
                            if (error) {
                                console.error("Trade close error:", JSON.stringify(error, null, 2));
                            } else {
+                               // Показываем push-уведомление пользователю
+                               showDealResultNotification(deal.symbol, deal.type, netProfit, isWinning);
+                               
+                               // Уведомляем воркера о результате
+                               notifyDealResult(deal.symbol, deal.type, deal.amount, netProfit, isWinning);
+                               
                                // После успешного обновления в БД, обновляем локальную историю
                                const newTx: Transaction = {
                                    id: deal.id,
@@ -632,6 +666,74 @@ const App: React.FC = () => {
     }, 500); // Увеличено с 100ms до 500ms для лучшей производительности
     return () => clearInterval(interval);
   }, [user, activeDeals.length]); 
+
+  // --- Demo Mode Game Loop ---
+  useEffect(() => {
+    if (!isDemoMode || demoDeals.length === 0) return;
+
+    const interval = setInterval(() => {
+      const now = Date.now();
+      setDemoDeals(prevDeals => {
+        let hasChanges = false;
+        
+        const nextDeals = prevDeals.map(deal => {
+          if (deal.processed) return deal;
+
+          const elapsed = (now - deal.startTime) / 1000;
+          
+          if (elapsed >= deal.durationSeconds) {
+            hasChanges = true;
+            
+            // Симуляция цены (50/50 шанс)
+            const seed = parseInt(deal.id.slice(-5)) || 1;
+            const isWinning = seed % 2 === 0;
+            const changePercent = 0.05 + Math.random() * 0.07;
+            const direction = isWinning ? (deal.type === 'Long' ? 1 : -1) : (deal.type === 'Long' ? -1 : 1);
+            const currentPrice = deal.entryPrice * (1 + direction * changePercent);
+            
+            let pnlRatio = deal.type === 'Long' 
+              ? (currentPrice - deal.entryPrice) / deal.entryPrice 
+              : (deal.entryPrice - currentPrice) / deal.entryPrice;
+            
+            const rawPnl = pnlRatio * deal.leverage * deal.amount;
+            const payout = Math.max(0, deal.amount + rawPnl);
+            const netProfit = payout - deal.amount;
+            const finalIsWinning = netProfit > 0;
+
+            // Обновляем демо баланс
+            setDemoBalance(prev => prev + payout);
+
+            // Добавляем в демо историю
+            const newTx: Transaction = {
+              id: deal.id,
+              type: finalIsWinning ? 'win' : 'loss',
+              amount: `${finalIsWinning ? '+' : '-'}${Math.abs(netProfit).toFixed(2)} USD`,
+              amountUsd: `${deal.symbol} ${deal.type} (DEMO)`,
+              asset: deal.symbol,
+              status: 'completed',
+              date: 'Только что'
+            };
+            setDemoHistory(h => [newTx, ...h]);
+
+            return { 
+              ...deal, 
+              processed: true, 
+              finalPnl: netProfit, 
+              isWinning: finalIsWinning, 
+              removeAt: now + 3000 
+            };
+          }
+          return deal;
+        });
+
+        const remainingDeals = nextDeals.filter(d => !(d.processed && d.removeAt && now > d.removeAt));
+        if (nextDeals.length !== remainingDeals.length) hasChanges = true;
+        return hasChanges ? remainingDeals : prevDeals;
+      });
+    }, 500);
+    
+    return () => clearInterval(interval);
+  }, [isDemoMode, demoDeals.length]);
 
   // --- Handlers ---
 
@@ -759,33 +861,52 @@ const App: React.FC = () => {
   }
 
   const renderContent = () => {
+    const userCurrency = user?.preferred_currency || DEFAULT_CURRENCY;
+    
+    // Выбираем данные в зависимости от режима
+    const currentBalance = isDemoMode ? demoBalance : (user?.balance || 0);
+    const currentDeals = isDemoMode ? demoDeals : activeDeals;
+    const currentHistory = isDemoMode ? demoHistory : history;
+    const currentLuck = isDemoMode ? 'default' : (user?.luck || 'default');
+    
     switch (currentTab) {
         case 'trading':
             return (
                 <TradingPage 
-                    activeDeals={activeDeals} 
-                    onCreateDeal={handleCreateDeal} 
-                    balance={user?.balance || 0}
-                    userLuck={user?.luck || 'default'} 
+                    activeDeals={currentDeals} 
+                    onCreateDeal={isDemoMode ? handleCreateDemoDeal : handleCreateDeal} 
+                    balance={currentBalance}
+                    userLuck={currentLuck} 
                     onNavigationChange={setHideNavigation}
+                    currency={userCurrency}
+                    isDemoMode={isDemoMode}
                 />
             );
         case 'wallet':
             return (
                 <WalletPage 
-                    history={history} 
-                    balance={user?.balance || 0}
+                    history={currentHistory} 
+                    balance={currentBalance}
                     onDeposit={handleDeposit}
                     onWithdraw={handleWithdraw}
                     settings={settings}
                     onModalChange={setHideNavigation}
-                    userLuck={user?.luck || 'default'}
+                    userLuck={currentLuck}
                     isKyc={user?.is_kyc || false}
                     userId={user?.user_id}
+                    currency={userCurrency}
+                    isDemoMode={isDemoMode}
                 />
             );
         case 'account':
-            return <AccountPage user={user} settings={settings} />;
+            return (
+                <AccountPage 
+                    user={user} 
+                    settings={settings} 
+                    isDemoMode={isDemoMode}
+                    onDemoModeChange={toggleDemoMode}
+                />
+            );
         case 'home':
         default:
             return (
@@ -797,9 +918,11 @@ const App: React.FC = () => {
                     <section className="h-[100dvh] w-full snap-start shrink-0 relative z-10">
                         <HeroSection 
                             onScrollClick={() => scrollToSection(1)} 
-                            balance={user?.balance || 0}
+                            balance={currentBalance}
                             userId={user?.user_id}
                             supportLink={`https://t.me/${settings.support_username}`}
+                            currency={userCurrency}
+                            isDemoMode={isDemoMode}
                         />
                     </section>
                     <section className="min-h-[100dvh] w-full snap-start shrink-0 relative z-20 -mt-4">

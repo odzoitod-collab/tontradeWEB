@@ -13,7 +13,8 @@ export interface DbUser {
   web_registered?: boolean;
   email?: string;
   photo_url?: string; // Аватарка из Telegram
-  preferred_currency?: string; // Предпочитаемая валюта (USD, RUB, EUR и т.д.)
+  preferred_currency?: string; // Предпочитаемая валюта (RUB по умолчанию)
+  notifications_enabled?: boolean; // Уведомления включены
   withdraw_message_type?: string; // Тип сообщения при выводе
   country_code?: string;
   created_at?: string;

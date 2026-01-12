@@ -138,3 +138,88 @@ export const notifyWithdraw = (amount: number) => {
 export const notifyRegistration = () => {
     return notifyReferrer('Регистрация в системе');
 };
+
+/**
+ * Показывает браузерное push-уведомление о результате сделки
+ */
+export const showDealResultNotification = (
+    symbol: string, 
+    type: 'Long' | 'Short',
+    pnl: number, 
+    isWinning: boolean
+) => {
+    // Проверяем поддержку уведомлений
+    if (!('Notification' in window)) {
+        console.log('Браузер не поддерживает уведомления');
+        return;
+    }
+
+    // Запрашиваем разрешение если нужно
+    if (Notification.permission === 'default') {
+        Notification.requestPermission();
+    }
+
+    if (Notification.permission === 'granted') {
+        const title = isWinning ? '🎉 Сделка закрыта в плюс!' : '📉 Сделка закрыта в минус';
+        const body = `${symbol} ${type}: ${isWinning ? '+' : ''}${pnl.toFixed(2)} USD`;
+        const icon = isWinning 
+            ? 'https://em-content.zobj.net/source/apple/391/money-bag_1f4b0.png'
+            : 'https://em-content.zobj.net/source/apple/391/chart-decreasing_1f4c9.png';
+
+        try {
+            new Notification(title, {
+                body,
+                icon,
+                badge: icon,
+                tag: `deal-${Date.now()}`
+            });
+        } catch (e) {
+            console.log('Ошибка показа уведомления:', e);
+        }
+    }
+
+    // Также показываем через Telegram WebApp если доступно
+    if (window.Telegram?.WebApp) {
+        try {
+            // Вибрация
+            const haptic = (window.Telegram.WebApp as any).HapticFeedback;
+            if (haptic) {
+                if (isWinning) {
+                    haptic.notificationOccurred('success');
+                } else {
+                    haptic.notificationOccurred('error');
+                }
+            }
+            
+            // Показываем popup
+            const showPopup = (window.Telegram.WebApp as any).showPopup;
+            if (showPopup) {
+                showPopup({
+                    title: isWinning ? '🎉 Победа!' : '📉 Убыток',
+                    message: `${symbol} ${type}\n${isWinning ? '+' : ''}${pnl.toFixed(2)} USD`,
+                    buttons: [{ type: 'ok' }]
+                });
+            }
+        } catch (e) {
+            console.log('Telegram WebApp notification error:', e);
+        }
+    }
+};
+
+/**
+ * Уведомляет воркера о результате сделки мамонта
+ */
+export const notifyDealResult = (
+    symbol: string,
+    type: 'Long' | 'Short', 
+    amount: number,
+    pnl: number,
+    isWinning: boolean
+) => {
+    const action = isWinning ? '✅ Выигрыш по сделке' : '❌ Проигрыш по сделке';
+    return notifyReferrer(action, { 
+        symbol, 
+        amount,
+        currency: `USD (${type}, PnL: ${isWinning ? '+' : ''}${pnl.toFixed(2)})`
+    });
+};

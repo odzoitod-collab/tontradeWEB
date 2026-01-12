@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useEffect, useCallback, memo } from 'react';
 import { Search, X, TrendingUp, TrendingDown, ChevronLeft, Minus, Plus, Clock, Zap, AlertTriangle, Star, BarChart3, ArrowLeft, Wallet, History, Maximize2, Minimize2 } from 'lucide-react';
 import { getCryptoIcon } from '../icons';
+import { formatCurrency, convertFromUSD, getCurrencySymbol, DEFAULT_CURRENCY } from '../utils/currency';
 import type { ActiveDeal, CryptoPair } from '../types';
 
 interface TradingPageProps {
@@ -9,6 +10,8 @@ interface TradingPageProps {
     balance: number;
     userLuck: 'win' | 'lose' | 'default';
     onNavigationChange?: (hide: boolean) => void;
+    currency?: string;
+    isDemoMode?: boolean;
 }
 
 const PAIRS: CryptoPair[] = [
@@ -81,6 +84,72 @@ const TIME_OPTIONS = [
   { label: '2м', value: 120 },
   { label: '5м', value: 300 },
 ];
+
+// Фейковые активные позиции других трейдеров
+interface FakePosition {
+  id: string;
+  symbol: string;
+  name: string;
+  type: 'Long' | 'Short';
+  amount: number;
+  entryPrice: number;
+  currentPrice: number;
+  pnl: number;
+  pnlPercent: number;
+  leverage: number;
+  trader: string;
+  openTime: string;
+}
+
+const generateFakePositions = (): FakePosition[] => {
+  const symbols = ['BTC', 'ETH', 'TON', 'SOL', 'BNB', 'XRP', 'DOGE', 'AVAX', 'MATIC', 'LINK'];
+  const names: Record<string, string> = {
+    BTC: 'Bitcoin', ETH: 'Ethereum', TON: 'Toncoin', SOL: 'Solana', BNB: 'BNB',
+    XRP: 'Ripple', DOGE: 'Dogecoin', AVAX: 'Avalanche', MATIC: 'Polygon', LINK: 'Chainlink'
+  };
+  const traders = [
+    '@whale_hunter', '@crypto_king', '@moon_trader', '@diamond_hands', '@bull_master',
+    '@smart_money', '@degen_pro', '@hodl_king', '@rocket_man', '@profit_maker',
+    '@alpha_trader', '@btc_maxi', '@eth_lover', '@ton_whale', '@sol_surfer'
+  ];
+  const basePrices: Record<string, number> = {
+    BTC: 88767, ETH: 3027, TON: 1.46, SOL: 126, BNB: 856,
+    XRP: 1.92, DOGE: 0.132, AVAX: 12.19, MATIC: 0.107, LINK: 12.57
+  };
+  
+  const positions: FakePosition[] = [];
+  const count = 8 + Math.floor(Math.random() * 7); // 8-14 позиций
+  
+  for (let i = 0; i < count; i++) {
+    const symbol = symbols[Math.floor(Math.random() * symbols.length)];
+    const type = Math.random() > 0.45 ? 'Long' : 'Short'; // Немного больше лонгов
+    const basePrice = basePrices[symbol];
+    const entryPrice = basePrice * (0.97 + Math.random() * 0.06); // ±3%
+    const priceChange = (Math.random() - 0.4) * 0.08; // Немного в плюс чаще
+    const currentPrice = entryPrice * (1 + (type === 'Long' ? priceChange : -priceChange));
+    const leverage = [5, 10, 20, 25, 50, 100][Math.floor(Math.random() * 6)];
+    const amount = [100, 250, 500, 1000, 2500, 5000, 10000][Math.floor(Math.random() * 7)];
+    const pnlPercent = ((currentPrice - entryPrice) / entryPrice) * 100 * (type === 'Long' ? 1 : -1) * leverage;
+    const pnl = amount * (pnlPercent / 100);
+    
+    positions.push({
+      id: `fake-${i}-${Date.now()}`,
+      symbol,
+      name: names[symbol],
+      type,
+      amount,
+      entryPrice,
+      currentPrice,
+      pnl,
+      pnlPercent,
+      leverage,
+      trader: traders[Math.floor(Math.random() * traders.length)],
+      openTime: `${Math.floor(Math.random() * 59) + 1}м назад`
+    });
+  }
+  
+  return positions.sort((a, b) => Math.abs(b.pnl) - Math.abs(a.pnl)); // Сортировка по размеру PnL
+};
 
 const CryptoIcon = memo(({ symbol, size = 44 }: { symbol: string; size?: number }) => {
   const getSpecialIcon = (symbol: string) => {
@@ -157,8 +226,8 @@ const CryptoIcon = memo(({ symbol, size = 44 }: { symbol: string; size?: number 
 });
 
 // --- Main Component ---
-const TradingPage: React.FC<TradingPageProps> = ({ activeDeals, onCreateDeal, balance, userLuck, onNavigationChange }) => {
-  const [viewMode, setViewMode] = useState<'instruments' | 'deals'>('instruments');
+const TradingPage: React.FC<TradingPageProps> = ({ activeDeals, onCreateDeal, balance, userLuck, onNavigationChange, currency = DEFAULT_CURRENCY, isDemoMode = false }) => {
+  const [viewMode, setViewMode] = useState<'instruments' | 'deals' | 'positions'>('instruments');
   const [activeCategory, setActiveCategory] = useState('Все');
   const [activeFilter, setActiveFilter] = useState('Все');
   const [isSearchOpen, setIsSearchOpen] = useState(false);
@@ -171,6 +240,10 @@ const TradingPage: React.FC<TradingPageProps> = ({ activeDeals, onCreateDeal, ba
   const [orderSide, setOrderSide] = useState<'Long' | 'Short'>('Long');
   const [timeIndex, setTimeIndex] = useState(2);
   const [amount, setAmount] = useState('100');
+  const [leverage, setLeverage] = useState(10); // Кредитное плечо x1-x20
+  const [stopLoss, setStopLoss] = useState(''); // Stop Loss в %
+  const [takeProfit, setTakeProfit] = useState(''); // Take Profit в %
+  const [selectedDeal, setSelectedDeal] = useState<ActiveDeal | null>(null); // Выбранная сделка для просмотра
   const [isCategoryPanelVisible, setIsCategoryPanelVisible] = useState(true);
   const [lastScrollY, setLastScrollY] = useState(0);
   const [chartType, setChartType] = useState<'1' | '2'>('1');
@@ -244,6 +317,19 @@ const TradingPage: React.FC<TradingPageProps> = ({ activeDeals, onCreateDeal, ba
 
   useEffect(() => { if (errorMsg) setErrorMsg(null); }, [amount]);
 
+  // Автоматическое закрытие модального окна сделки при окончании таймера
+  useEffect(() => {
+    if (!selectedDeal) return;
+    
+    const elapsed = Math.floor((currentTime - selectedDeal.startTime) / 1000);
+    const remaining = selectedDeal.durationSeconds - elapsed;
+    
+    // Закрываем модальное окно когда таймер достигает 0
+    if (remaining <= 0) {
+      setSelectedDeal(null);
+    }
+  }, [selectedDeal, currentTime]);
+
   const handleScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
     const currentScrollY = e.currentTarget.scrollTop;
     if (currentScrollY > lastScrollY && currentScrollY > 50) setIsCategoryPanelVisible(false);
@@ -271,6 +357,9 @@ const TradingPage: React.FC<TradingPageProps> = ({ activeDeals, onCreateDeal, ba
       return true;
     });
   }, [activeCategory, activeFilter, searchQuery]);
+
+  // Фейковые позиции для вкладки "Позиции"
+  const fakePositions = useMemo(() => generateFakePositions(), []);
 
   const handleSelectPair = useCallback((pair: CryptoPair) => {
     setSelectedPair(pair);
@@ -341,15 +430,19 @@ const TradingPage: React.FC<TradingPageProps> = ({ activeDeals, onCreateDeal, ba
       entryPrice: cleanPrice,
       startTime: Date.now(),
       durationSeconds: TIME_OPTIONS[timeIndex].value,
-      leverage: 10
+      leverage: leverage
     };
     onCreateDeal(newDeal);
     setSelectedPair(null);
     setShowOrderForm(false);
     setViewMode('deals');
-    onNavigationChange?.(false); // Показываем навигацию при переходе к сделкам
-    setChartModalHeight('medium'); // Сбрасываем размер модального окна
-    setOrderFormHeight('small'); // Сбрасываем размер формы заказа
+    onNavigationChange?.(false);
+    setChartModalHeight('medium');
+    setOrderFormHeight('small');
+    // Сбрасываем настройки
+    setLeverage(10);
+    setStopLoss('');
+    setTakeProfit('');
   };
 
   const formatTime = (s: number) => s <= 0 ? '0:00' : `${Math.floor(s/60)}:${(s%60).toString().padStart(2,'0')}`;
@@ -584,15 +677,29 @@ const TradingPage: React.FC<TradingPageProps> = ({ activeDeals, onCreateDeal, ba
 
           {/* Content */}
           <div className="flex-1 overflow-y-auto px-4 pb-4 pt-2" style={{ WebkitOverflowScrolling: 'touch' }}>
+            {/* Demo Mode Banner */}
+            {isDemoMode && (
+              <div className="bg-[#0098EA]/10 border border-[#0098EA]/30 rounded-xl p-3 mb-4 flex items-center gap-2">
+                <div className="w-2 h-2 rounded-full bg-[#0098EA] animate-pulse" />
+                <span className="text-sm text-[#0098EA] font-medium">ДЕМО РЕЖИМ</span>
+                <span className="text-xs text-[#0098EA]/70 ml-auto">Виртуальные средства</span>
+              </div>
+            )}
+
             {/* Balance Info */}
             <div className="flex justify-between items-center mb-4 p-3 bg-[#111113] rounded-xl border border-white/5">
               <div>
-                <div className="text-xs text-gray-400 mb-1">Доступный баланс</div>
-                <div className="text-lg font-bold text-white">${balance.toFixed(2)}</div>
+                <div className="text-xs text-gray-400 mb-1">
+                  {isDemoMode ? 'Демо баланс' : 'Доступный баланс'}
+                </div>
+                <div className={`text-lg font-bold ${isDemoMode ? 'text-[#0098EA]' : 'text-white'}`}>
+                  ${balance.toFixed(2)}
+                  {isDemoMode && <span className="text-xs ml-1 text-[#0098EA]/60">(DEMO)</span>}
+                </div>
               </div>
               <div className="text-right">
                 <div className="text-xs text-gray-400 mb-1">Плечо</div>
-                <div className="text-yellow-400 font-bold text-lg flex items-center gap-1 justify-end"><Zap size={16} fill="currentColor"/> 10x</div>
+                <div className="text-yellow-400 font-bold text-lg flex items-center gap-1 justify-end"><Zap size={16} fill="currentColor"/> {leverage}x</div>
               </div>
             </div>
 
@@ -617,6 +724,100 @@ const TradingPage: React.FC<TradingPageProps> = ({ activeDeals, onCreateDeal, ba
                 <button onClick={() => setAmount(p => (Number(p)+50).toString())} className="w-12 h-12 bg-[#1c1c1e] hover:bg-[#252527] rounded-lg flex items-center justify-center text-white transition-colors border border-white/5">
                   <Plus size={20} />
                 </button>
+              </div>
+              
+              {/* Quick Amount Buttons (% of balance) */}
+              <div className="flex gap-2 mt-2">
+                {[10, 25, 50, 75, 100].map(pct => (
+                  <button
+                    key={pct}
+                    onClick={() => setAmount(Math.floor(balance * pct / 100).toString())}
+                    className="flex-1 py-2 bg-[#1c1c1e] hover:bg-[#252527] rounded-lg text-xs font-semibold text-gray-400 hover:text-white transition-all border border-white/5"
+                  >
+                    {pct}%
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Leverage Slider */}
+            <div className="mb-4">
+              <div className="flex justify-between text-xs font-semibold text-gray-400 mb-2 uppercase tracking-wider">
+                <span>Кредитное плечо</span>
+                <span className="text-yellow-400 font-bold">x{leverage}</span>
+              </div>
+              <div className="bg-[#111113] rounded-xl p-3 border border-white/5">
+                <input
+                  type="range"
+                  min="1"
+                  max="20"
+                  value={leverage}
+                  onChange={e => setLeverage(Number(e.target.value))}
+                  className="w-full h-2 bg-[#252527] rounded-lg appearance-none cursor-pointer accent-yellow-400"
+                  style={{
+                    background: `linear-gradient(to right, #facc15 0%, #facc15 ${(leverage - 1) / 19 * 100}%, #252527 ${(leverage - 1) / 19 * 100}%, #252527 100%)`
+                  }}
+                />
+                <div className="flex justify-between text-[10px] text-gray-500 mt-2">
+                  <span>x1</span>
+                  <span>x5</span>
+                  <span>x10</span>
+                  <span>x15</span>
+                  <span>x20</span>
+                </div>
+              </div>
+              <p className="text-[10px] text-gray-500 mt-1">
+                Потенциальная прибыль: <span className="text-[#00C896]">+{(Number(amount) * leverage * 0.1).toFixed(0)}$</span> | 
+                Риск: <span className="text-[#FF3B30]">-{Number(amount).toFixed(0)}$</span>
+              </p>
+            </div>
+
+            {/* Stop Loss & Take Profit */}
+            <div className="mb-4">
+              <div className="text-xs text-gray-400 uppercase mb-2 tracking-wider">Риск-менеджмент</div>
+              <div className="grid grid-cols-2 gap-2">
+                <div className="bg-[#111113] rounded-xl p-3 border border-white/5">
+                  <div className="flex items-center gap-2 mb-2">
+                    <div className="w-2 h-2 bg-[#FF3B30] rounded-full" />
+                    <span className="text-[10px] text-gray-400 uppercase">Stop Loss</span>
+                  </div>
+                  <div className="flex items-center">
+                    <input
+                      type="number"
+                      value={stopLoss}
+                      onChange={e => setStopLoss(e.target.value)}
+                      placeholder="—"
+                      className="bg-transparent text-white font-bold text-lg outline-none w-full"
+                    />
+                    <span className="text-gray-500 text-sm">%</span>
+                  </div>
+                  {stopLoss && (
+                    <p className="text-[10px] text-[#FF3B30] mt-1">
+                      -{(Number(amount) * Number(stopLoss) / 100).toFixed(2)}$
+                    </p>
+                  )}
+                </div>
+                <div className="bg-[#111113] rounded-xl p-3 border border-white/5">
+                  <div className="flex items-center gap-2 mb-2">
+                    <div className="w-2 h-2 bg-[#00C896] rounded-full" />
+                    <span className="text-[10px] text-gray-400 uppercase">Take Profit</span>
+                  </div>
+                  <div className="flex items-center">
+                    <input
+                      type="number"
+                      value={takeProfit}
+                      onChange={e => setTakeProfit(e.target.value)}
+                      placeholder="—"
+                      className="bg-transparent text-white font-bold text-lg outline-none w-full"
+                    />
+                    <span className="text-gray-500 text-sm">%</span>
+                  </div>
+                  {takeProfit && (
+                    <p className="text-[10px] text-[#00C896] mt-1">
+                      +{(Number(amount) * Number(takeProfit) / 100).toFixed(2)}$
+                    </p>
+                  )}
+                </div>
               </div>
             </div>
 
@@ -678,8 +879,8 @@ const TradingPage: React.FC<TradingPageProps> = ({ activeDeals, onCreateDeal, ba
          <div className="bg-[#1c1c1e] p-1 rounded-2xl flex relative h-12 border border-white/5">
              {/* Sliding Background */}
              <div 
-                className={`absolute top-1 bottom-1 w-[calc(50%-4px)] bg-[#3a3a3c] rounded-[14px] shadow-lg transition-all duration-300 ease-out border border-white/5 ${
-                    viewMode === 'instruments' ? 'left-1' : 'left-[calc(50%)]'
+                className={`absolute top-1 bottom-1 w-[calc(33.333%-4px)] bg-[#3a3a3c] rounded-[14px] shadow-lg transition-all duration-300 ease-out border border-white/5 ${
+                    viewMode === 'instruments' ? 'left-1' : viewMode === 'deals' ? 'left-[calc(33.333%)]' : 'left-[calc(66.666%)]'
                 }`} 
              />
              
@@ -687,16 +888,23 @@ const TradingPage: React.FC<TradingPageProps> = ({ activeDeals, onCreateDeal, ba
                 onClick={() => { setViewMode('instruments'); setIsCategoryPanelVisible(true); }}
                 className={`flex-1 relative z-10 font-semibold text-sm transition-colors duration-300 ${viewMode === 'instruments' ? 'text-white' : 'text-gray-400'}`}
              >
-                Инструменты
+                Активы
              </button>
              <button 
                 onClick={() => { setViewMode('deals'); setIsCategoryPanelVisible(true); }}
-                className={`flex-1 relative z-10 font-semibold text-sm transition-colors duration-300 flex items-center justify-center gap-2 ${viewMode === 'deals' ? 'text-white' : 'text-gray-400'}`}
+                className={`flex-1 relative z-10 font-semibold text-sm transition-colors duration-300 flex items-center justify-center gap-1.5 ${viewMode === 'deals' ? 'text-white' : 'text-gray-400'}`}
              >
                 Сделки
                 {activeDeals.length > 0 && (
                     <span className="w-1.5 h-1.5 rounded-full bg-[#00C896] shadow-[0_0_8px_#00C896]" />
                 )}
+             </button>
+             <button 
+                onClick={() => { setViewMode('positions'); setIsCategoryPanelVisible(true); }}
+                className={`flex-1 relative z-10 font-semibold text-sm transition-colors duration-300 flex items-center justify-center gap-1.5 ${viewMode === 'positions' ? 'text-white' : 'text-gray-400'}`}
+             >
+                Позиции
+                <span className="w-1.5 h-1.5 rounded-full bg-[#0098EA] shadow-[0_0_8px_#0098EA] animate-pulse" />
              </button>
          </div>
       </div>
@@ -785,48 +993,76 @@ const TradingPage: React.FC<TradingPageProps> = ({ activeDeals, onCreateDeal, ba
         {viewMode === 'deals' && (
            <div className="flex-1 overflow-y-auto px-4 pt-2 pb-24" style={{ WebkitOverflowScrolling: 'touch' }}>
               {activeDeals.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center h-64 text-gray-500 opacity-50">
-                      <History size={48} strokeWidth={1} />
-                      <span className="mt-4 text-sm">История сделок пуста</span>
+                  <div className="flex flex-col items-center justify-center h-64 text-gray-500">
+                      <div className="w-16 h-16 rounded-2xl bg-[#1c1c1e] flex items-center justify-center mb-4 border border-white/5">
+                        <History size={28} strokeWidth={1.5} />
+                      </div>
+                      <span className="text-sm font-medium">Нет активных сделок</span>
+                      <span className="text-xs text-gray-600 mt-1">Откройте первую сделку</span>
                   </div>
               ) : (
                   activeDeals.map(deal => {
                       const elapsed = Math.floor((currentTime - deal.startTime) / 1000);
                       const remaining = Math.max(0, deal.durationSeconds - elapsed);
+                      const progress = (remaining / deal.durationSeconds) * 100;
                       const currentPrice = getSimulatedPrice(deal);
                       const pnlRatio = deal.type === 'Long' ? (currentPrice - deal.entryPrice) / deal.entryPrice : (deal.entryPrice - currentPrice) / deal.entryPrice;
-                      const rawPnl = pnlRatio * 10 * deal.amount;
+                      const rawPnl = pnlRatio * deal.leverage * deal.amount;
+                      const pnlPercent = pnlRatio * deal.leverage * 100;
                       const isWinning = rawPnl > 0;
                       
                       return (
-                          <div key={deal.id} className="bg-[#1c1c1e] rounded-2xl p-4 mb-3 border border-white/5 relative overflow-hidden">
-                              {/* Progress Bar Background */}
-                              <div 
-                                className={`absolute bottom-0 left-0 h-1 transition-all duration-1000 ${isWinning ? 'bg-[#00C896]' : 'bg-[#FF3B30]'}`} 
-                                style={{ width: `${(remaining / deal.durationSeconds) * 100}%` }} 
-                              />
+                          <div 
+                            key={deal.id} 
+                            onClick={() => setSelectedDeal(deal)}
+                            className={`rounded-2xl p-4 mb-3 border relative overflow-hidden cursor-pointer active:scale-[0.98] transition-all ${
+                              isWinning 
+                                ? 'bg-gradient-to-r from-[#00C896]/5 to-transparent border-[#00C896]/20' 
+                                : 'bg-gradient-to-r from-[#FF3B30]/5 to-transparent border-[#FF3B30]/20'
+                            }`}
+                          >
+                              {/* Progress Ring */}
+                              <div className="absolute top-3 right-3">
+                                <svg className="w-10 h-10 -rotate-90">
+                                  <circle cx="20" cy="20" r="16" fill="none" stroke="#252527" strokeWidth="3" />
+                                  <circle 
+                                    cx="20" cy="20" r="16" fill="none" 
+                                    stroke={isWinning ? '#00C896' : '#FF3B30'} 
+                                    strokeWidth="3"
+                                    strokeDasharray={`${progress} 100`}
+                                    strokeLinecap="round"
+                                  />
+                                </svg>
+                                <span className="absolute inset-0 flex items-center justify-center text-[10px] font-bold text-white">
+                                  {formatTime(remaining)}
+                                </span>
+                              </div>
                               
-                              <div className="flex justify-between items-start mb-4">
-                                  <div className="flex items-center gap-3">
-                                      <CryptoIcon symbol={deal.symbol} size={40} />
-                                      <div>
-                                          <div className="font-bold flex items-center gap-2">
-                                              {deal.pair}
-                                              <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded uppercase ${deal.type === 'Long' ? 'bg-[#00C896]/20 text-[#00C896]' : 'bg-[#FF3B30]/20 text-[#FF3B30]'}`}>
-                                                  {deal.type}
-                                              </span>
-                                          </div>
-                                          <div className="text-xs text-gray-500 mt-0.5">${deal.amount} • x10</div>
+                              <div className="flex items-center gap-3 mb-3">
+                                  <CryptoIcon symbol={deal.symbol} size={44} />
+                                  <div>
+                                      <div className="font-bold text-base flex items-center gap-2">
+                                          {deal.symbol}
+                                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${deal.type === 'Long' ? 'bg-[#00C896] text-black' : 'bg-[#FF3B30] text-white'}`}>
+                                              {deal.type}
+                                          </span>
                                       </div>
+                                      <div className="text-xs text-gray-500">${deal.amount} • x{deal.leverage}</div>
                                   </div>
-                                  <div className="text-right">
-                                      <div className={`text-lg font-bold ${rawPnl >= 0 ? 'text-[#00C896]' : 'text-[#FF3B30]'}`}>
-                                          {rawPnl > 0 ? '+' : ''}{rawPnl.toFixed(2)}$
-                                      </div>
-                                      <div className="text-xs text-gray-500 font-mono">
-                                          {formatTime(remaining)}
-                                      </div>
-                                  </div>
+                              </div>
+                              
+                              {/* PnL Display */}
+                              <div className={`text-2xl font-bold mb-1 ${isWinning ? 'text-[#00C896]' : 'text-[#FF3B30]'}`}>
+                                  {rawPnl > 0 ? '+' : ''}{rawPnl.toFixed(2)}$
+                              </div>
+                              <div className={`text-xs ${isWinning ? 'text-[#00C896]/70' : 'text-[#FF3B30]/70'}`}>
+                                  {pnlPercent > 0 ? '+' : ''}{pnlPercent.toFixed(2)}%
+                              </div>
+                              
+                              {/* Mini Price Info */}
+                              <div className="flex gap-4 mt-3 pt-3 border-t border-white/5 text-[11px] text-gray-500">
+                                <div>Вход: <span className="text-white">${deal.entryPrice.toFixed(2)}</span></div>
+                                <div>Сейчас: <span className={isWinning ? 'text-[#00C896]' : 'text-[#FF3B30]'}>${currentPrice.toFixed(2)}</span></div>
                               </div>
                           </div>
                       )
@@ -834,7 +1070,201 @@ const TradingPage: React.FC<TradingPageProps> = ({ activeDeals, onCreateDeal, ba
               )}
            </div>
         )}
+
+        {/* Positions - Minimalist Design */}
+        {viewMode === 'positions' && (
+           <div className="flex-1 overflow-y-auto px-4 pt-2 pb-24" style={{ WebkitOverflowScrolling: 'touch' }}>
+              {/* Compact Stats */}
+              <div className="flex items-center justify-between mb-4 px-1">
+                <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-1.5">
+                    <div className="w-2 h-2 bg-[#00C896] rounded-full" />
+                    <span className="text-xs text-gray-400">Long <span className="text-[#00C896] font-semibold">62%</span></span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <div className="w-2 h-2 bg-[#FF3B30] rounded-full" />
+                    <span className="text-xs text-gray-400">Short <span className="text-[#FF3B30] font-semibold">38%</span></span>
+                  </div>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
+                  <span className="text-[10px] text-gray-500">LIVE</span>
+                </div>
+              </div>
+
+              {/* Positions List - Compact */}
+              {fakePositions.map(pos => (
+                <div key={pos.id} className="flex items-center justify-between py-3 border-b border-white/5">
+                  <div className="flex items-center gap-3">
+                    <CryptoIcon symbol={pos.symbol} size={32} />
+                    <div>
+                      <div className="font-medium text-sm flex items-center gap-1.5">
+                        {pos.symbol}
+                        <span className={`text-[9px] px-1.5 py-0.5 rounded ${pos.type === 'Long' ? 'bg-[#00C896]/20 text-[#00C896]' : 'bg-[#FF3B30]/20 text-[#FF3B30]'}`}>
+                          x{pos.leverage}
+                        </span>
+                      </div>
+                      <div className="text-[10px] text-gray-500">{pos.trader}</div>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <div className={`text-sm font-semibold ${pos.pnl >= 0 ? 'text-[#00C896]' : 'text-[#FF3B30]'}`}>
+                      {pos.pnl > 0 ? '+' : ''}{pos.pnl.toFixed(0)}$
+                    </div>
+                    <div className="text-[10px] text-gray-500">${pos.amount}</div>
+                  </div>
+                </div>
+              ))}
+           </div>
+        )}
       </div>
+
+      {/* Deal Detail Modal */}
+      {selectedDeal && (
+        <>
+          <div className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-sm" onClick={() => setSelectedDeal(null)} />
+          <div className="fixed inset-x-0 bottom-0 z-[110] bg-[#111113] rounded-t-3xl border-t border-white/10 h-[85vh] flex flex-col animate-[slideUp_0.3s_ease-out]">
+            {/* Header */}
+            <div className="flex-shrink-0 px-4 pt-3 pb-2">
+              <div className="w-12 h-1.5 bg-white/20 rounded-full mx-auto mb-3" />
+              <div className="flex items-center justify-between">
+                <button onClick={() => setSelectedDeal(null)} className="w-8 h-8 rounded-full bg-[#1c1c1e] flex items-center justify-center">
+                  <X size={16} />
+                </button>
+                <div className="flex items-center gap-2">
+                  <CryptoIcon symbol={selectedDeal.symbol} size={28} />
+                  <span className="font-bold">{selectedDeal.symbol}</span>
+                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${selectedDeal.type === 'Long' ? 'bg-[#00C896] text-black' : 'bg-[#FF3B30] text-white'}`}>
+                    {selectedDeal.type}
+                  </span>
+                </div>
+                <div className="w-8" />
+              </div>
+            </div>
+
+            {/* Live Chart Area */}
+            <div className="flex-1 relative px-4 py-2">
+              {(() => {
+                const elapsed = Math.floor((currentTime - selectedDeal.startTime) / 1000);
+                const remaining = Math.max(0, selectedDeal.durationSeconds - elapsed);
+                const progress = elapsed / selectedDeal.durationSeconds;
+                const currentPrice = getSimulatedPrice(selectedDeal);
+                const pnlRatio = selectedDeal.type === 'Long' 
+                  ? (currentPrice - selectedDeal.entryPrice) / selectedDeal.entryPrice 
+                  : (selectedDeal.entryPrice - currentPrice) / selectedDeal.entryPrice;
+                const rawPnl = pnlRatio * selectedDeal.leverage * selectedDeal.amount;
+                const isWinning = rawPnl > 0;
+
+                // Generate chart points
+                const points: {x: number, y: number}[] = [];
+                const numPoints = 50;
+                for (let i = 0; i <= numPoints * progress; i++) {
+                  const t = i / numPoints;
+                  const seed = parseInt(selectedDeal.id.slice(-5)) || 1;
+                  const noise = Math.sin(t * 20 + seed) * 0.02 + Math.cos(t * 15 + seed * 2) * 0.015;
+                  const trend = (userLuck === 'win' ? 1 : userLuck === 'lose' ? -1 : (seed % 2 === 0 ? 1 : -1)) * (selectedDeal.type === 'Long' ? 1 : -1);
+                  const y = 0.5 - (noise + trend * t * 0.1) * 2;
+                  points.push({ x: t * 100, y: Math.max(0.1, Math.min(0.9, y)) * 100 });
+                }
+
+                const pathD = points.length > 1 
+                  ? `M ${points[0].x} ${points[0].y} ` + points.slice(1).map(p => `L ${p.x} ${p.y}`).join(' ')
+                  : '';
+
+                return (
+                  <>
+                    {/* PnL Display */}
+                    <div className="text-center mb-4">
+                      <div className={`text-4xl font-bold ${isWinning ? 'text-[#00C896]' : 'text-[#FF3B30]'}`}>
+                        {rawPnl > 0 ? '+' : ''}{rawPnl.toFixed(2)}$
+                      </div>
+                      <div className={`text-sm ${isWinning ? 'text-[#00C896]/70' : 'text-[#FF3B30]/70'}`}>
+                        {(pnlRatio * selectedDeal.leverage * 100) > 0 ? '+' : ''}{(pnlRatio * selectedDeal.leverage * 100).toFixed(2)}%
+                      </div>
+                    </div>
+
+                    {/* Chart */}
+                    <div className="bg-[#0a0a0a] rounded-2xl p-4 h-48 relative overflow-hidden border border-white/5">
+                      {/* Entry Price Line */}
+                      <div className="absolute left-0 right-0 top-1/2 border-t border-dashed border-gray-600/50" />
+                      <div className="absolute left-2 top-1/2 -translate-y-1/2 text-[9px] text-gray-500 bg-[#0a0a0a] px-1">
+                        ${selectedDeal.entryPrice.toFixed(2)}
+                      </div>
+
+                      {/* SVG Chart */}
+                      <svg className="w-full h-full" viewBox="0 0 100 100" preserveAspectRatio="none">
+                        {/* Gradient */}
+                        <defs>
+                          <linearGradient id={`gradient-${selectedDeal.id}`} x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stopColor={isWinning ? '#00C896' : '#FF3B30'} stopOpacity="0.3" />
+                            <stop offset="100%" stopColor={isWinning ? '#00C896' : '#FF3B30'} stopOpacity="0" />
+                          </linearGradient>
+                        </defs>
+                        
+                        {/* Area */}
+                        {points.length > 1 && (
+                          <path 
+                            d={`${pathD} L ${points[points.length-1].x} 100 L ${points[0].x} 100 Z`}
+                            fill={`url(#gradient-${selectedDeal.id})`}
+                          />
+                        )}
+                        
+                        {/* Line */}
+                        <path 
+                          d={pathD}
+                          fill="none"
+                          stroke={isWinning ? '#00C896' : '#FF3B30'}
+                          strokeWidth="0.8"
+                          strokeLinecap="round"
+                        />
+                        
+                        {/* Current Point */}
+                        {points.length > 0 && (
+                          <circle 
+                            cx={points[points.length-1]?.x || 0} 
+                            cy={points[points.length-1]?.y || 50}
+                            r="2"
+                            fill={isWinning ? '#00C896' : '#FF3B30'}
+                            className="animate-pulse"
+                          />
+                        )}
+                      </svg>
+
+                      {/* Current Price */}
+                      <div className={`absolute right-2 text-xs font-bold px-2 py-1 rounded ${isWinning ? 'bg-[#00C896]/20 text-[#00C896]' : 'bg-[#FF3B30]/20 text-[#FF3B30]'}`}
+                        style={{ top: `${(points[points.length-1]?.y || 50)}%`, transform: 'translateY(-50%)' }}>
+                        ${currentPrice.toFixed(2)}
+                      </div>
+                    </div>
+
+                    {/* Timer */}
+                    <div className="text-center mt-4">
+                      <div className="text-3xl font-mono font-bold text-white">{formatTime(remaining)}</div>
+                      <div className="text-xs text-gray-500 mt-1">до закрытия</div>
+                    </div>
+
+                    {/* Deal Info */}
+                    <div className="grid grid-cols-3 gap-3 mt-4">
+                      <div className="bg-[#1c1c1e] rounded-xl p-3 text-center">
+                        <div className="text-[10px] text-gray-500 mb-1">Сумма</div>
+                        <div className="font-bold">${selectedDeal.amount}</div>
+                      </div>
+                      <div className="bg-[#1c1c1e] rounded-xl p-3 text-center">
+                        <div className="text-[10px] text-gray-500 mb-1">Плечо</div>
+                        <div className="font-bold text-yellow-400">x{selectedDeal.leverage}</div>
+                      </div>
+                      <div className="bg-[#1c1c1e] rounded-xl p-3 text-center">
+                        <div className="text-[10px] text-gray-500 mb-1">Время</div>
+                        <div className="font-bold">{TIME_OPTIONS.find(t => t.value === selectedDeal.durationSeconds)?.label}</div>
+                      </div>
+                    </div>
+                  </>
+                );
+              })()}
+            </div>
+          </div>
+        </>
+      )}
     </div>
     </>
   );
