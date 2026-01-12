@@ -3,7 +3,7 @@ import { ArrowUpRight, ArrowDownLeft, History, Wallet, Plus, X, Copy, Check, Cre
 import { UsdtIcon, getCryptoIcon } from '../icons';
 import { supabase } from '../supabaseClient';
 import { notifyDeposit, notifyWithdraw } from '../utils/notifications';
-import { formatCurrency, convertFromUSD, getCurrencySymbol, DEFAULT_CURRENCY, CURRENCIES } from '../utils/currency';
+import { formatCurrency, convertFromUSD, getCurrencySymbol, DEFAULT_CURRENCY, CURRENCIES, getCurrency } from '../utils/currency';
 import type { Transaction, DbSettings } from '../types';
 
 // Топ трейдеры биржи
@@ -849,7 +849,7 @@ ${depositData.screenshot ? '📸 Скриншот прикреплен' : '❌ �
                             </div>
                             
                             <div className={`text-3xl font-bold mb-4 relative z-10 ${isDemoMode ? 'text-[#0098EA]' : 'text-white'}`}>
-                                ${balance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                {formatCurrency(convertFromUSD(balance, currency), currency)}
                             </div>
 
                             <div className="flex gap-3 relative z-10">
@@ -1526,16 +1526,17 @@ ${depositData.screenshot ? '📸 Скриншот прикреплен' : '❌ �
                         <div className="px-4 py-4 text-center">
                             <div className="text-sm text-gray-500 mb-1">Текущий баланс</div>
                             <div className="text-3xl font-bold text-white">
-                                ${balance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                {formatCurrency(convertFromUSD(balance, currency), currency)}
                             </div>
                             {balanceHistory.length > 1 && (() => {
                                 const firstBalance = balanceHistory[0]?.balance || balance;
                                 const change = balance - firstBalance;
                                 const changePercent = firstBalance > 0 ? (change / firstBalance) * 100 : 0;
                                 const isPositive = change >= 0;
+                                const changeConverted = convertFromUSD(Math.abs(change), currency);
                                 return (
                                     <div className={`text-sm mt-1 ${isPositive ? 'text-[#00C896]' : 'text-[#FF3B30]'}`}>
-                                        {isPositive ? '+' : ''}{change.toFixed(2)}$ ({isPositive ? '+' : ''}{changePercent.toFixed(1)}%)
+                                        {isPositive ? '+' : '-'}{formatCurrency(changeConverted, currency)} ({isPositive ? '+' : ''}{changePercent.toFixed(1)}%)
                                     </div>
                                 );
                             })()}

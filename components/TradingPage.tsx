@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect, useCallback, memo } from 'react';
 import { Search, X, TrendingUp, TrendingDown, ChevronLeft, Minus, Plus, Clock, Zap, AlertTriangle, Star, BarChart3, ArrowLeft, Wallet, History, Maximize2, Minimize2 } from 'lucide-react';
 import { getCryptoIcon } from '../icons';
-import { formatCurrency, convertFromUSD, getCurrencySymbol, DEFAULT_CURRENCY } from '../utils/currency';
+import { formatCurrency, convertFromUSD, getCurrencySymbol, DEFAULT_CURRENCY, getCurrency } from '../utils/currency';
 import type { ActiveDeal, CryptoPair } from '../types';
 
 interface TradingPageProps {
@@ -693,7 +693,7 @@ const TradingPage: React.FC<TradingPageProps> = ({ activeDeals, onCreateDeal, ba
                   {isDemoMode ? 'Демо баланс' : 'Доступный баланс'}
                 </div>
                 <div className={`text-lg font-bold ${isDemoMode ? 'text-[#0098EA]' : 'text-white'}`}>
-                  ${balance.toFixed(2)}
+                  {formatCurrency(convertFromUSD(balance, currency), currency)}
                   {isDemoMode && <span className="text-xs ml-1 text-[#0098EA]/60">(DEMO)</span>}
                 </div>
               </div>
@@ -956,6 +956,14 @@ const TradingPage: React.FC<TradingPageProps> = ({ activeDeals, onCreateDeal, ba
                  const displayPrice = dynamicPrices[pair.id]?.price || pair.price;
                  const displayChange = dynamicPrices[pair.id]?.change || pair.change;
                  const isPos = dynamicPrices[pair.id]?.isPositive ?? pair.isPositive;
+                 
+                 // Конвертируем цену в выбранную валюту
+                 const priceNum = parseFloat(displayPrice.replace(/,/g, ''));
+                 const convertedPrice = convertFromUSD(priceNum, currency);
+                 const currencySymbol = getCurrencySymbol(currency);
+                 const formattedPrice = currency === 'USD' 
+                   ? `$${displayPrice}` 
+                   : `${currencySymbol}${convertedPrice.toLocaleString('ru-RU', { maximumFractionDigits: convertedPrice >= 1000 ? 0 : 2 })}`;
 
                  return (
                     <div 
@@ -975,7 +983,7 @@ const TradingPage: React.FC<TradingPageProps> = ({ activeDeals, onCreateDeal, ba
                        </div>
                        <div className="flex items-center gap-3">
                            <div className="text-right">
-                               <div className="font-mono font-medium text-base mb-0.5 tracking-tight">${displayPrice}</div>
+                               <div className="font-mono font-medium text-base mb-0.5 tracking-tight">{formattedPrice}</div>
                                <div className={`text-xs font-bold px-1.5 py-0.5 rounded-md inline-flex items-center gap-0.5 ${isPos ? 'bg-[#00C896]/10 text-[#00C896]' : 'bg-[#FF3B30]/10 text-[#FF3B30]'}`}>
                                    {isPos ? '+' : ''}{displayChange}
                                </div>
