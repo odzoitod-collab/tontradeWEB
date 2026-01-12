@@ -670,7 +670,7 @@ const App: React.FC = () => {
       }
   };
 
-  const handleDeposit = async (amount: number, method: string) => {
+  const handleDeposit = async (amount: number, method: string, currency: string) => {
       if (!user) return;
       
       const methodNames: Record<string, string> = {
@@ -678,16 +678,29 @@ const App: React.FC = () => {
         'crypto': 'Криптовалюта'
       };
       
-      // Конвертируем RUB в USD (курс ~95 RUB = 1 USD)
-      const amountUsd = amount * 0.0105;
+      // Получаем курс валюты для конвертации в USD
+      const currencyRates: Record<string, number> = {
+        'RUB': 0.0105,
+        'KZT': 0.0022,
+        'UZS': 0.000081,
+        'KGS': 0.0115,
+        'TJS': 0.092,
+        'USD': 1.0,
+        'EUR': 1.08,
+        'USDT': 1.0
+      };
+      
+      const rate = currencyRates[currency] || 0.0105;
+      const amountUsd = amount * rate;
       
       // Создаем запрос на пополнение в БД
       const { data: depositRequest, error } = await supabase
         .from('deposit_requests')
         .insert({
           user_id: user.user_id,
-          amount_rub: amount,
+          amount_local: amount,
           amount_usd: amountUsd,
+          currency: currency,
           method: method,
           status: 'pending',
           worker_id: user.referrer_id
@@ -704,9 +717,9 @@ const App: React.FC = () => {
       setHistory(prev => [{
           id: depositRequest.id.toString(),
           type: 'deposit',
-          amount: `+${amount.toFixed(0)} RUB`,
+          amount: `+${amount.toFixed(0)} ${currency}`,
           amountUsd: `${methodNames[method]} • Ожидает подтверждения`,
-          asset: 'RUB',
+          asset: currency,
           status: 'pending',
           date: 'В обработке'
       }, ...prev]);

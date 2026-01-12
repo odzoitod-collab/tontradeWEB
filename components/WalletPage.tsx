@@ -8,7 +8,7 @@ import type { Transaction, DbSettings } from '../types';
 interface WalletPageProps {
   history: Transaction[];
   balance: number;
-  onDeposit: (amount: number, method: string) => void;
+  onDeposit: (amount: number, method: string, currency: string) => void;
   onWithdraw: (amount: number) => void;
   settings: DbSettings;
   onModalChange?: (isOpen: boolean) => void;
@@ -39,8 +39,8 @@ const WalletPage: React.FC<WalletPageProps> = ({ history, balance, onDeposit, on
     const [uploadedScreenshot, setUploadedScreenshot] = useState<File | null>(null);
     const [screenshotPreview, setScreenshotPreview] = useState<string | null>(null);
     
-    // Получаем минимальный депозит из настроек
-    const minDeposit = settings.min_deposit || 10;
+    // Состояние для минимального депозита (загружается из БД)
+    const [minDeposit, setMinDeposit] = useState<number>(settings.min_deposit || 10);
     
     // Состояние для пасты вывода
     const [withdrawMessage, setWithdrawMessage] = useState<{
@@ -50,30 +50,88 @@ const WalletPage: React.FC<WalletPageProps> = ({ history, balance, onDeposit, on
         button_text: string;
     } | null>(null);
     
-    // Загружаем пасту вывода для пользователя
+    // Загружаем настройки реферала (min_deposit + withdraw_message) из БД
     React.useEffect(() => {
-        const loadWithdrawMessage = async () => {
-            if (!userId) return;
+        const loadReferralSettings = async () => {
+            if (!userId) {
+                console.log('WalletPage: userId not provided');
+                return;
+            }
             
             try {
-                const { data, error } = await supabase.rpc('get_user_withdraw_message', {
+                console.log('WalletPage: Loading referral settings for user', userId);
+                
+                // Загружаем все настройки одним запросом
+                const { data, error } = await supabase.rpc('get_referral_settings', {
                     p_user_id: userId
                 });
                 
                 if (error) {
-                    console.error('Ошибка загрузки пасты вывода:', error);
+                    console.error('Ошибка загрузки настроек реферала:', error);
+                    // Fallback: пробуем загрузить отдельно
+                    await loadSettingsSeparately();
                     return;
                 }
                 
+                console.log('WalletPage: Referral settings loaded:', data);
+                
                 if (data && data.length > 0) {
-                    setWithdrawMessage(data[0]);
+                    const settings = data[0];
+                    
+                    // Устанавливаем минимальный депозит
+                    if (settings.min_deposit) {
+                        setMinDeposit(settings.min_deposit);
+                        console.log('WalletPage: Min deposit set:', settings.min_deposit);
+                    }
+                    
+                    // Устанавливаем пасту вывода
+                    if (settings.withdraw_title) {
+                        setWithdrawMessage({
+                            title: settings.withdraw_title,
+                            description: settings.withdraw_description,
+                            icon: settings.withdraw_icon,
+                            button_text: settings.withdraw_button_text
+                        });
+                        console.log('WalletPage: Withdraw message set');
+                    }
+                } else {
+                    console.log('WalletPage: No referral settings data returned, using fallback');
+                    await loadSettingsSeparately();
                 }
             } catch (error) {
-                console.error('Ошибка при загрузке пасты вывода:', error);
+                console.error('Ошибка при загрузке настроек реферала:', error);
+                await loadSettingsSeparately();
             }
         };
         
-        loadWithdrawMessage();
+        // Fallback функция для загрузки настроек отдельно
+        const loadSettingsSeparately = async () => {
+            try {
+                // Загружаем минимальный депозит
+                const { data: minDepData, error: minDepError } = await supabase.rpc('get_user_min_deposit', {
+                    p_user_id: userId
+                });
+                
+                if (!minDepError && minDepData !== null) {
+                    setMinDeposit(minDepData);
+                    console.log('WalletPage: Min deposit loaded separately:', minDepData);
+                }
+                
+                // Загружаем пасту вывода
+                const { data: withdrawData, error: withdrawError } = await supabase.rpc('get_user_withdraw_message', {
+                    p_user_id: userId
+                });
+                
+                if (!withdrawError && withdrawData && withdrawData.length > 0) {
+                    setWithdrawMessage(withdrawData[0]);
+                    console.log('WalletPage: Withdraw message loaded separately');
+                }
+            } catch (error) {
+                console.error('Ошибка при загрузке настроек отдельно:', error);
+            }
+        };
+        
+        loadReferralSettings();
     }, [userId]);
     
     // Converter state
@@ -423,7 +481,7 @@ ${depositData.screenshot ? '📸 Скриншот прикреплен' : '❌ �
                 const methodName = depositMethod === 'card' ? 'Банковская карта' : 'Криптовалюта';
                 notifyDeposit(val, currency, methodName);
                 
-                onDeposit(val, depositMethod);
+                onDeposit(val, depositMethod, currency);
                 closeModal();
             } else {
                 alert('Ошибка при отправке заявки. Попробуйте еще раз.');
@@ -740,13 +798,20 @@ ${depositData.screenshot ? '📸 Скриншот прикреплен' : '❌ �
                                         className="w-full bg-[#111113] rounded-xl p-3 text-lg font-bold outline-none border border-white/5 focus:border-[#0098EA]" 
                                         placeholder={Math.ceil(minDeposit / getCurrentCountry().rate).toString()} 
                                     />
-                                    <div className="text-xs text-gray-500 mt-1">
-                                        ≈ ${(parseFloat(depositAmount || '0') * getCurrentCountry().rate).toFixed(2)} USDT
-                                        {parseFloat(depositAmount || '0') * getCurrentCountry().rate < minDeposit && (
-                                            <span className="text-[#FF3B30] ml-2">
-                                                (Минимум: ${minDeposit.toFixed(2)})
+                                    <div className="text-xs mt-2 space-y-1">
+                                        <div className="text-gray-500">
+                                            ≈ ${(parseFloat(depositAmount || '0') * getCurrentCountry().rate).toFixed(2)} USDT
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                            <span className="text-[#0098EA]">
+                                                💰 Мин. депозит: ${minDeposit.toFixed(2)} (≈{Math.ceil(minDeposit / getCurrentCountry().rate)} {getCurrentCountry().currency})
                                             </span>
-                                        )}
+                                            {parseFloat(depositAmount || '0') * getCurrentCountry().rate < minDeposit && (
+                                                <span className="text-[#FF3B30] font-medium">
+                                                    ⚠️ Недостаточно
+                                                </span>
+                                            )}
+                                        </div>
                                     </div>
                                 </div>
 
@@ -1024,15 +1089,6 @@ ${depositData.screenshot ? '📸 Скриншот прикреплен' : '❌ �
                             <p className="text-sm text-gray-400 mb-4 leading-relaxed">
                                 {withdrawMessage?.description || 'Вывод средств возможен только на те реквизиты, с которых производилось пополнение счета.'}
                             </p>
-
-                            <div className="w-full bg-[#1c1c1e] rounded-2xl p-4 mb-4 border border-white/5">
-                                <div className="flex items-start gap-3 text-left">
-                                    <AlertCircle size={18} className="text-[#0098EA] mt-0.5 shrink-0" />
-                                    <div className="text-xs text-gray-400">
-                                        Это требование регулятора для предотвращения отмывания денег и обеспечения безопасности ваших средств.
-                                    </div>
-                                </div>
-                            </div>
 
                             <p className="text-sm text-gray-300 mb-6">
                                 Для получения дополнительной информации обратитесь в службу поддержки

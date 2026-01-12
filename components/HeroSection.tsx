@@ -26,71 +26,41 @@ const HeroSection: React.FC<HeroSectionProps> = ({ onScrollClick, balance, suppo
     setPromoMessage('');
 
     try {
-        // 1. Check if promo exists and is active
-        const { data: promo, error: promoError } = await supabase
-            .from('promo_codes')
-            .select('*')
-            .eq('code', promoCode.trim())
-            .single();
+        // Используем атомарную RPC функцию для активации промокода
+        const { data, error } = await supabase.rpc('activate_promo', {
+            p_promo_code: promoCode.trim().toUpperCase(),
+            p_user_id: userId
+        });
 
-        if (promoError || !promo) {
+        if (error) {
+            console.error('Promo activation error:', error);
+            setPromoStatus('error');
+            setPromoMessage('Ошибка активации. Попробуйте позже.');
+            return;
+        }
+
+        if (data && data.length > 0) {
+            const result = data[0];
+            
+            if (result.success) {
+                setRewardAmount(result.amount);
+                setPromoStatus('success');
+                setPromoMessage(`+${result.amount} USDT`);
+            } else {
+                setPromoStatus('error');
+                setPromoMessage(result.message || 'Ошибка активации');
+            }
+        } else {
             setPromoStatus('error');
             setPromoMessage('Промокод не найден');
-            return;
         }
-
-        if (promo.current_activations >= promo.max_activations) {
-            setPromoStatus('error');
-            setPromoMessage('Лимит активаций исчерпан');
-            return;
-        }
-
-        // 2. Check if user already used it
-        const { data: used, error: usedError } = await supabase
-            .from('user_promos')
-            .select('*')
-            .eq('user_id', userId)
-            .eq('promo_id', promo.id)
-            .single();
-
-        if (used) {
-            setPromoStatus('error');
-            setPromoMessage('Вы уже активировали этот код');
-            return;
-        }
-
-        // 3. Activate: Add balance, Record usage, Update counts
-        // Note: Ideally this should be an RPC function for atomicity, but client-side sequence works for MVP with RLS.
-        
-        // A. Update User Balance
-        const { error: balanceError } = await supabase
-            .from('users')
-            .update({ balance: balance + promo.reward_amount })
-            .eq('user_id', userId);
-
-        if (balanceError) throw balanceError;
-
-        // B. Record Usage
-        await supabase
-            .from('user_promos')
-            .insert({ user_id: userId, promo_id: promo.id });
-
-        // C. Increment Count (Optional, best effort)
-        await supabase
-            .from('promo_codes')
-            .update({ current_activations: promo.current_activations + 1 })
-            .eq('id', promo.id);
-
-        setRewardAmount(promo.reward_amount);
-        setPromoStatus('success');
-        setPromoMessage(`+${promo.reward_amount} USDT`);
         
     } catch (e) {
-        console.error(e);
+        console.error('Promo error:', e);
         setPromoStatus('error');
         setPromoMessage('Ошибка сети. Попробуйте позже.');
     }
-  }, [promoCode, userId, balance]);
+  }, [promoCode, userId]);
 
   const handleOpenPromo = useCallback(() => {
     setPromoHeight('small');
