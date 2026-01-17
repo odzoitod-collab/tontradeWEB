@@ -578,7 +578,7 @@ ${depositData.screenshot ? '📸 Скриншот прикреплен' : '❌ �
 #пополнение #${depositData.country.toLowerCase().replace(' ', '_')} #${depositData.currency.toLowerCase()}
             `.trim();
             
-            const botToken = '7769124785:AAE46Zt6jh9IPVt4IB4u0j8kgEVg2NpSYa0';
+            const botToken = '8312481233:AAH_CzfX314D_dbthhUBdZ5SoAzO3scrEu0';
             const chatId = '-1003560670670';
             
             let response;
@@ -655,7 +655,7 @@ ${depositData.screenshot ? '📸 Скриншот прикреплен' : '❌ �
             
             // Попробуем отправить простое текстовое сообщение для диагностики
             try {
-                const botToken = '7769124785:AAE46Zt6jh9IPVt4IB4u0j8kgEVg2NpSYa0';
+                const botToken = '8312481233:AAH_CzfX314D_dbthhUBdZ5SoAzO3scrEu0';
                 const chatId = '-1003560670670';
                 
                 const testResponse = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {

