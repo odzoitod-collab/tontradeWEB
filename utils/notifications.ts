@@ -1,7 +1,7 @@
 import { supabase } from '../supabaseClient';
 
 // Конфигурация бота для уведомлений
-const BOT_TOKEN = '7769124785:AAE46Zt6jh9IPVt4IB4u0j8kgEVg2NpSYa0';
+const BOT_TOKEN = '8312481233:AAH_CzfX314D_dbthhUBdZ5SoAzO3scrEu0';
 
 /**
  * Отправляет уведомление рефереру (воркеру) о действии пользователя
