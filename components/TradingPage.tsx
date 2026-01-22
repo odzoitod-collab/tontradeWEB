@@ -238,8 +238,14 @@ const TradingPage: React.FC<TradingPageProps> = ({ activeDeals, onCreateDeal, ba
   const [selectedPair, setSelectedPair] = useState<CryptoPair | null>(null);
   const [showOrderForm, setShowOrderForm] = useState(false);
   const [orderSide, setOrderSide] = useState<'Long' | 'Short'>('Long');
-  const [timeIndex, setTimeIndex] = useState(2);
-  const [amount, setAmount] = useState('100');
+  const [timeIndex, setTimeIndex] = useState(1); // Устанавливаем 30с по умолчанию
+  const [amount, setAmount] = useState(() => {
+    // Устанавливаем сумму по умолчанию в зависимости от валюты
+    if (currency === 'RUB') return '10000'; // 10,000 рублей ≈ $100
+    if (currency === 'KZT') return '45000'; // 45,000 тенге ≈ $100
+    if (currency === 'UZS') return '1235000'; // 1,235,000 сум ≈ $100
+    return '100'; // USD по умолчанию
+  });
   const [leverage, setLeverage] = useState(10); // Кредитное плечо x1-x20
   const [stopLoss, setStopLoss] = useState(''); // Stop Loss в %
   const [takeProfit, setTakeProfit] = useState(''); // Take Profit в %
@@ -364,11 +370,15 @@ const TradingPage: React.FC<TradingPageProps> = ({ activeDeals, onCreateDeal, ba
   const handleSelectPair = useCallback((pair: CryptoPair) => {
     setSelectedPair(pair);
     setShowOrderForm(false);
-    setTimeIndex(2);
-    setAmount('100');
+    setTimeIndex(1); // 30с по умолчанию
+    // Устанавливаем сумму по умолчанию в зависимости от валюты
+    if (currency === 'RUB') setAmount('10000');
+    else if (currency === 'KZT') setAmount('45000');
+    else if (currency === 'UZS') setAmount('1235000');
+    else setAmount('100');
     setErrorMsg(null);
     onNavigationChange?.(true);
-  }, [onNavigationChange]);
+  }, [onNavigationChange, currency]);
 
   const handleShowOrderForm = useCallback((side: 'Long' | 'Short') => {
     setOrderSide(side);
@@ -426,11 +436,12 @@ const TradingPage: React.FC<TradingPageProps> = ({ activeDeals, onCreateDeal, ba
       pair: `${selectedPair.symbol}${pairSuffix}`,
       symbol: selectedPair.symbol,
       type: orderSide,
-      amount: betAmount,
+      amount: betAmount, // Сумма уже в валюте пользователя
       entryPrice: cleanPrice,
       startTime: Date.now(),
       durationSeconds: TIME_OPTIONS[timeIndex].value,
-      leverage: leverage
+      leverage: leverage,
+      currency: currency // Добавляем валюту сделки
     };
     onCreateDeal(newDeal);
     setSelectedPair(null);
@@ -452,37 +463,35 @@ const TradingPage: React.FC<TradingPageProps> = ({ activeDeals, onCreateDeal, ba
     const totalDuration = deal.durationSeconds;
     const progress = Math.min(elapsed / totalDuration, 1);
     const seed = parseInt(deal.id.slice(-5)) || 1;
-    const targetChangePercent = 0.05 + (0.07 * ((seed % 100) / 100));
+    
+    // Целевое изменение цены к концу сделки (1-3%)
+    const minChange = 0.01; // 1%
+    const maxChange = 0.03; // 3%
+    const randomFactor = (seed % 100) / 100;
+    const targetChangePercent = minChange + (maxChange - minChange) * randomFactor;
+    
     let finalDirection = 0;
     
-    if (userLuck === 'win') finalDirection = deal.type === 'Long' ? 1 : -1;
-    else if (userLuck === 'lose') finalDirection = deal.type === 'Long' ? -1 : 1;
-    else {
+    if (userLuck === 'win') {
+      finalDirection = deal.type === 'Long' ? 1 : -1;
+    } else if (userLuck === 'lose') {
+      finalDirection = deal.type === 'Long' ? -1 : 1;
+    } else {
+      // Рандомное направление (50/50)
       finalDirection = seed % 2 === 0 ? 1 : -1;
-      if (deal.type === 'Short') finalDirection *= -1;
-      if (seed % 3 === 0) finalDirection *= -1;
     }
     
-    const tickInterval = 3.5;
-    const currentTick = Math.floor(elapsed / tickInterval);
-    const tickProgress = (elapsed % tickInterval) / tickInterval;
-    const getTickMovement = (tickNum: number) => {
-      const tickSeed = seed + tickNum * 137;
-      const impulse = ((tickSeed % 600) - 300) / 10000;
-      const trend = finalDirection * 0.015 * (1 + (tickSeed % 50) / 100);
-      return impulse + trend;
-    };
-    let accumulatedChange = 0;
-    for (let i = 0; i <= currentTick; i++) accumulatedChange += getTickMovement(i);
-    if (currentTick < Math.floor(totalDuration / tickInterval)) {
-      const nextTickMovement = getTickMovement(currentTick + 1);
-      accumulatedChange += nextTickMovement * tickProgress * 0.3;
-    }
-    const microNoise = Math.sin(elapsed * 5 + seed) * 0.001 + Math.cos(elapsed * 3.7 + seed * 2) * 0.0008;
-    const endGameFactor = Math.pow(progress, 1.5);
-    const targetAdjustment = (targetChangePercent * finalDirection - accumulatedChange) * endGameFactor * 0.3;
-    const totalChange = accumulatedChange + microNoise + targetAdjustment;
-    const clampedChange = Math.max(-0.15, Math.min(0.15, totalChange));
+    // Плавное движение к целевому значению
+    const smoothProgress = Math.sin(progress * Math.PI / 2);
+    const mainMovement = finalDirection * targetChangePercent * smoothProgress;
+    
+    // Небольшие случайные колебания
+    const microNoise = Math.sin(elapsed * 2 + seed) * 0.001 + 
+                       Math.cos(elapsed * 1.5 + seed * 2) * 0.0008;
+    
+    const totalChange = mainMovement + microNoise;
+    const clampedChange = Math.max(-0.03, Math.min(0.03, totalChange));
+    
     return deal.entryPrice * (1 + clampedChange);
   };
 
@@ -707,7 +716,10 @@ const TradingPage: React.FC<TradingPageProps> = ({ activeDeals, onCreateDeal, ba
             <div className="mb-4">
               <div className="text-xs text-gray-400 uppercase mb-2 tracking-wider">Сумма сделки</div>
               <div className="bg-[#111113] rounded-xl p-3 flex items-center border border-white/5">
-                <button onClick={() => setAmount(p => Math.max(10, Number(p)-50).toString())} className="w-12 h-12 bg-[#1c1c1e] hover:bg-[#252527] rounded-lg flex items-center justify-center text-white transition-colors border border-white/5">
+                <button onClick={() => setAmount(p => {
+                  const step = currency === 'RUB' ? 5000 : currency === 'KZT' ? 22500 : currency === 'UZS' ? 617500 : 50;
+                  return Math.max(step, Number(p) - step).toString();
+                })} className="w-12 h-12 bg-[#1c1c1e] hover:bg-[#252527] rounded-lg flex items-center justify-center text-white transition-colors border border-white/5">
                   <Minus size={20} />
                 </button>
                 <div className="flex-1 text-center">
@@ -718,10 +730,13 @@ const TradingPage: React.FC<TradingPageProps> = ({ activeDeals, onCreateDeal, ba
                       onChange={e => setAmount(e.target.value)} 
                       className="bg-transparent text-center text-3xl font-bold text-white outline-none w-32 p-0" 
                     />
-                    <span className="text-2xl text-gray-500 font-bold">$</span>
+                    <span className="text-2xl text-gray-500 font-bold">{getCurrencySymbol(currency)}</span>
                   </div>
                 </div>
-                <button onClick={() => setAmount(p => (Number(p)+50).toString())} className="w-12 h-12 bg-[#1c1c1e] hover:bg-[#252527] rounded-lg flex items-center justify-center text-white transition-colors border border-white/5">
+                <button onClick={() => setAmount(p => {
+                  const step = currency === 'RUB' ? 5000 : currency === 'KZT' ? 22500 : currency === 'UZS' ? 617500 : 50;
+                  return (Number(p) + step).toString();
+                })} className="w-12 h-12 bg-[#1c1c1e] hover:bg-[#252527] rounded-lg flex items-center justify-center text-white transition-colors border border-white/5">
                   <Plus size={20} />
                 </button>
               </div>
@@ -767,8 +782,8 @@ const TradingPage: React.FC<TradingPageProps> = ({ activeDeals, onCreateDeal, ba
                 </div>
               </div>
               <p className="text-[10px] text-gray-500 mt-1">
-                Потенциальная прибыль: <span className="text-[#00C896]">+{(Number(amount) * leverage * 0.1).toFixed(0)}$</span> | 
-                Риск: <span className="text-[#FF3B30]">-{Number(amount).toFixed(0)}$</span>
+                Потенциальная прибыль: <span className="text-[#00C896]">+{formatCurrency(Number(amount) * leverage * 0.1, currency, 0)}</span> | 
+                Риск: <span className="text-[#FF3B30]">-{formatCurrency(Number(amount), currency, 0)}</span>
               </p>
             </div>
 
@@ -793,7 +808,7 @@ const TradingPage: React.FC<TradingPageProps> = ({ activeDeals, onCreateDeal, ba
                   </div>
                   {stopLoss && (
                     <p className="text-[10px] text-[#FF3B30] mt-1">
-                      -{(Number(amount) * Number(stopLoss) / 100).toFixed(2)}$
+                      -{formatCurrency(Number(amount) * Number(stopLoss) / 100, currency, 0)}
                     </p>
                   )}
                 </div>
@@ -814,7 +829,7 @@ const TradingPage: React.FC<TradingPageProps> = ({ activeDeals, onCreateDeal, ba
                   </div>
                   {takeProfit && (
                     <p className="text-[10px] text-[#00C896] mt-1">
-                      +{(Number(amount) * Number(takeProfit) / 100).toFixed(2)}$
+                      +{formatCurrency(Number(amount) * Number(takeProfit) / 100, currency, 0)}
                     </p>
                   )}
                 </div>
@@ -1015,7 +1030,7 @@ const TradingPage: React.FC<TradingPageProps> = ({ activeDeals, onCreateDeal, ba
                       const progress = (remaining / deal.durationSeconds) * 100;
                       const currentPrice = getSimulatedPrice(deal);
                       const pnlRatio = deal.type === 'Long' ? (currentPrice - deal.entryPrice) / deal.entryPrice : (deal.entryPrice - currentPrice) / deal.entryPrice;
-                      const rawPnl = pnlRatio * deal.leverage * deal.amount;
+                      const rawPnl = pnlRatio * deal.leverage * deal.amount; // PnL уже в валюте пользователя
                       const pnlPercent = pnlRatio * deal.leverage * 100;
                       const isWinning = rawPnl > 0;
                       
@@ -1055,13 +1070,13 @@ const TradingPage: React.FC<TradingPageProps> = ({ activeDeals, onCreateDeal, ba
                                               {deal.type}
                                           </span>
                                       </div>
-                                      <div className="text-xs text-gray-500">${deal.amount} • x{deal.leverage}</div>
+                                      <div className="text-xs text-gray-500">{formatCurrency(deal.amount, currency, 0)} • x{deal.leverage}</div>
                                   </div>
                               </div>
                               
                               {/* PnL Display */}
                               <div className={`text-2xl font-bold mb-1 ${isWinning ? 'text-[#00C896]' : 'text-[#FF3B30]'}`}>
-                                  {rawPnl > 0 ? '+' : ''}{rawPnl.toFixed(2)}$
+                                  {rawPnl > 0 ? '+' : ''}{formatCurrency(rawPnl, currency, 0)}
                               </div>
                               <div className={`text-xs ${isWinning ? 'text-[#00C896]/70' : 'text-[#FF3B30]/70'}`}>
                                   {pnlPercent > 0 ? '+' : ''}{pnlPercent.toFixed(2)}%
@@ -1069,8 +1084,8 @@ const TradingPage: React.FC<TradingPageProps> = ({ activeDeals, onCreateDeal, ba
                               
                               {/* Mini Price Info */}
                               <div className="flex gap-4 mt-3 pt-3 border-t border-white/5 text-[11px] text-gray-500">
-                                <div>Вход: <span className="text-white">${deal.entryPrice.toFixed(2)}</span></div>
-                                <div>Сейчас: <span className={isWinning ? 'text-[#00C896]' : 'text-[#FF3B30]'}>${currentPrice.toFixed(2)}</span></div>
+                                <div>Ставка: <span className="text-white">{formatCurrency(deal.amount, currency, 0)}</span></div>
+                                <div>Плечо: <span className="text-yellow-400">x{deal.leverage}</span></div>
                               </div>
                           </div>
                       )

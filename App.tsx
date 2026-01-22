@@ -1,7 +1,7 @@
 import React, { useRef, useState, useEffect, useMemo, useCallback } from 'react';
 import { supabase } from './supabaseClient';
 import { notifyRegistration, notifyTrade, notifyWithdraw, showDealResultNotification, notifyDealResult } from './utils/notifications';
-import { DEFAULT_CURRENCY } from './utils/currency';
+import { DEFAULT_CURRENCY, convertToUSD, formatCurrency } from './utils/currency';
 import HeroSection from './components/HeroSection';
 import TasksSheet from './components/TasksSheet';
 import BottomNavigation from './components/BottomNavigation';
@@ -462,8 +462,8 @@ const App: React.FC = () => {
     };
   }, [user?.user_id, user?.balance, user?.luck, user?.is_kyc]);
 
-  // --- 3. Trading Engine Logic (Реалистичная симуляция цены) ---
-  // Цена движется импульсивно с резкими скачками, обновление каждые 3-4 секунды
+  // --- 3. Trading Engine Logic (Симуляция цены с изменением 1-3%) ---
+  // Цена изменяется на 1-3% в течение времени сделки
   const getRiggedPrice = (deal: ActiveDeal, currentTime: number) => {
      const elapsed = (currentTime - deal.startTime) / 1000;
      const totalDuration = deal.durationSeconds;
@@ -474,9 +474,9 @@ const App: React.FC = () => {
      // --- ОПРЕДЕЛЯЕМ НАПРАВЛЕНИЕ НА ОСНОВЕ LUCK ---
      const luck = user?.luck || 'default';
      
-     // Целевое изменение цены к концу сделки (5-12%)
-     const minChange = 0.05;
-     const maxChange = 0.12;
+     // Целевое изменение цены к концу сделки (1-3%)
+     const minChange = 0.01; // 1%
+     const maxChange = 0.03; // 3%
      const randomFactor = (seed % 100) / 100;
      const targetChangePercent = minChange + (maxChange - minChange) * randomFactor;
      
@@ -491,55 +491,24 @@ const App: React.FC = () => {
      } else {
          // Рандомное направление (50/50)
          finalDirection = seed % 2 === 0 ? 1 : -1;
-         if (deal.type === 'Short') finalDirection *= -1;
-         if (seed % 3 === 0) finalDirection *= -1;
      }
      
-     // --- РЕАЛИСТИЧНОЕ ДВИЖЕНИЕ ЦЕНЫ ---
+     // --- ПЛАВНОЕ ДВИЖЕНИЕ ЦЕНЫ К ЦЕЛЕВОМУ ЗНАЧЕНИЮ ---
      
-     // Количество "тиков" (обновлений) - каждые 3-4 секунды
-     const tickInterval = 3.5; // секунды между обновлениями
-     const currentTick = Math.floor(elapsed / tickInterval);
-     const tickProgress = (elapsed % tickInterval) / tickInterval;
+     // Используем плавную функцию для достижения целевого изменения
+     const smoothProgress = Math.sin(progress * Math.PI / 2); // Плавное ускорение в начале, замедление в конце
      
-     // Генерируем импульсивные движения для каждого тика
-     const getTickMovement = (tickNum: number) => {
-         const tickSeed = seed + tickNum * 137; // Уникальный seed для каждого тика
-         
-         // Случайный импульс от -3% до +3%
-         const impulse = ((tickSeed % 600) - 300) / 10000; // -0.03 to 0.03
-         
-         // Добавляем тренд в нужном направлении
-         const trendStrength = 0.015; // 1.5% за тик в среднем
-         const trend = finalDirection * trendStrength * (1 + (tickSeed % 50) / 100);
-         
-         return impulse + trend;
-     };
+     // Основное движение к цели
+     const mainMovement = finalDirection * targetChangePercent * smoothProgress;
      
-     // Суммируем все движения до текущего тика
-     let accumulatedChange = 0;
-     for (let i = 0; i <= currentTick; i++) {
-         accumulatedChange += getTickMovement(i);
-     }
+     // Добавляем небольшие случайные колебания (не более 0.2%)
+     const microNoise = Math.sin(elapsed * 2 + seed) * 0.001 + 
+                        Math.cos(elapsed * 1.5 + seed * 2) * 0.0008;
      
-     // Добавляем плавную интерполяцию к следующему тику
-     if (currentTick < Math.floor(totalDuration / tickInterval)) {
-         const nextTickMovement = getTickMovement(currentTick + 1);
-         accumulatedChange += nextTickMovement * tickProgress * 0.3; // Плавный переход
-     }
+     const totalChange = mainMovement + microNoise;
      
-     // Добавляем микро-волатильность (мелкие колебания)
-     const microNoise = Math.sin(elapsed * 5 + seed) * 0.001 + 
-                        Math.cos(elapsed * 3.7 + seed * 2) * 0.0008;
-     
-     // Применяем ускорение к концу сделки (цена стремится к целевому значению)
-     const endGameFactor = Math.pow(progress, 1.5); // Ускорение в конце
-     const targetAdjustment = (targetChangePercent * finalDirection - accumulatedChange) * endGameFactor * 0.3;
-     
-     const totalChange = accumulatedChange + microNoise + targetAdjustment;
-     
-     // Ограничиваем максимальное изменение
-     const clampedChange = Math.max(-0.15, Math.min(0.15, totalChange));
+     // Ограничиваем изменение в пределах 1-3%
+     const clampedChange = Math.max(-0.03, Math.min(0.03, totalChange));
      
      return deal.entryPrice * (1 + clampedChange);
   };
@@ -619,10 +588,11 @@ const App: React.FC = () => {
                                notifyDealResult(deal.symbol, deal.type, deal.amount, netProfit, isWinning);
                                
                                // После успешного обновления в БД, обновляем локальную историю
+                               const userCurrency = user?.preferred_currency || DEFAULT_CURRENCY;
                                const newTx: Transaction = {
                                    id: deal.id,
                                    type: isWinning ? 'win' : 'loss',
-                                   amount: `${isWinning ? '+' : '-'}${Math.abs(netProfit).toFixed(2)} USD`,
+                                   amount: `${isWinning ? '+' : '-'}${formatCurrency(Math.abs(netProfit), userCurrency, 0)}`,
                                    amountUsd: `${deal.symbol} ${deal.type}`,
                                    asset: deal.symbol,
                                    status: 'completed',
@@ -704,10 +674,11 @@ const App: React.FC = () => {
             setDemoBalance(prev => prev + payout);
 
             // Добавляем в демо историю
+            const userCurrency = user?.preferred_currency || DEFAULT_CURRENCY;
             const newTx: Transaction = {
               id: deal.id,
               type: finalIsWinning ? 'win' : 'loss',
-              amount: `${finalIsWinning ? '+' : '-'}${Math.abs(netProfit).toFixed(2)} USD`,
+              amount: `${finalIsWinning ? '+' : '-'}${formatCurrency(Math.abs(netProfit), userCurrency, 0)}`,
               amountUsd: `${deal.symbol} ${deal.type} (DEMO)`,
               asset: deal.symbol,
               status: 'completed',
@@ -748,6 +719,11 @@ const App: React.FC = () => {
         // Sync Margin Deduction to DB
         await supabase.from('users').update({ balance: newBalance }).eq('user_id', user.user_id);
 
+        // Конвертируем сумму в USD для сохранения в БД (если нужно)
+        const amountUSD = deal.currency && deal.currency !== 'USD' 
+          ? convertToUSD(deal.amount, deal.currency) 
+          : deal.amount;
+
         // Save Trade to DB
         const { error: tradeError } = await supabase.from('trades').insert({
           id: deal.id,
@@ -755,7 +731,7 @@ const App: React.FC = () => {
           pair: deal.pair,
           symbol: deal.symbol,
           type: deal.type,
-          amount: deal.amount,
+          amount: amountUSD, // Сохраняем в USD для совместимости
           entry_price: deal.entryPrice,
           start_time: deal.startTime,
           duration_seconds: deal.durationSeconds,
