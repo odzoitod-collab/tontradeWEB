@@ -156,7 +156,6 @@ export interface ActiveDeal {
   startTime: number;
   durationSeconds: number;
   leverage: number;
-  currency?: string; // Валюта сделки
   // State tracking
   processed?: boolean;
   finalPnl?: number;

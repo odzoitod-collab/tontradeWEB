@@ -20,7 +20,7 @@ export const CURRENCIES: Record<string, Currency> = {
 };
 
 // Дефолтная валюта
-export const DEFAULT_CURRENCY = 'RUB';
+export const DEFAULT_CURRENCY = 'USD';
 
 // Конвертация из USD в выбранную валюту
 export function convertFromUSD(amountUSD: number, currencyCode: string): number {

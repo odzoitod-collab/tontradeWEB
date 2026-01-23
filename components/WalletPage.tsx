@@ -387,7 +387,7 @@ const WalletPage: React.FC<WalletPageProps> = ({ history, balance, onDeposit, on
     }, [userId, balance]);
     
     // Converter state
-    const [convertFrom, setConvertFrom] = useState('RUB');
+    const [convertFrom, setConvertFrom] = useState('USD');
     const [convertTo, setConvertTo] = useState('USDT');
     const [convertAmount, setConvertAmount] = useState('1000');
 
