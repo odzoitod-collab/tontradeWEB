@@ -856,7 +856,6 @@ const App: React.FC = () => {
     const userCurrency = user?.preferred_currency || DEFAULT_CURRENCY;
     
     // Выбираем данные в зависимости от режима
-    const userCurrency = user?.preferred_currency || DEFAULT_CURRENCY;
     const rawBalance = isDemoMode ? demoBalance : (user?.balance || 0);
     // Конвертируем баланс из USD в валюту пользователя для отображения
     const currentBalance = isDemoMode ? rawBalance : convertFromUSD(rawBalance, userCurrency);
