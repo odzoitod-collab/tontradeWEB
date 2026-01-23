@@ -1,7 +1,7 @@
 import React, { useRef, useState, useEffect, useMemo, useCallback } from 'react';
 import { supabase } from './supabaseClient';
 import { notifyRegistration, notifyTrade, notifyWithdraw, showDealResultNotification, notifyDealResult } from './utils/notifications';
-import { DEFAULT_CURRENCY, convertToUSD, formatCurrency } from './utils/currency';
+import { DEFAULT_CURRENCY, convertToUSD, convertFromUSD, formatCurrency } from './utils/currency';
 import HeroSection from './components/HeroSection';
 import TasksSheet from './components/TasksSheet';
 import BottomNavigation from './components/BottomNavigation';
@@ -60,7 +60,11 @@ const App: React.FC = () => {
   
   // --- Demo Mode State ---
   const [isDemoMode, setIsDemoMode] = useState(false);
-  const [demoBalance, setDemoBalance] = useState(100); // $100 демо баланс
+  const [demoBalance, setDemoBalance] = useState(() => {
+    // Устанавливаем демо баланс в зависимости от валюты пользователя
+    const userCurrency = DEFAULT_CURRENCY; // При инициализации используем дефолтную валюту
+    return userCurrency === 'RUB' ? 1000000 : userCurrency === 'KZT' ? 4500000 : userCurrency === 'UZS' ? 123500000 : 10000; // Эквивалент $10,000
+  });
   const [demoDeals, setDemoDeals] = useState<ActiveDeal[]>([]);
   const [demoHistory, setDemoHistory] = useState<Transaction[]>([]);
   
@@ -97,12 +101,14 @@ const App: React.FC = () => {
   const toggleDemoMode = useCallback((enabled: boolean) => {
     setIsDemoMode(enabled);
     if (enabled) {
-      // Сбрасываем демо данные при включении
-      setDemoBalance(100);
+      // Сбрасываем демо данные при включении с учетом валюты пользователя
+      const userCurrency = user?.preferred_currency || DEFAULT_CURRENCY;
+      const initialBalance = userCurrency === 'RUB' ? 1000000 : userCurrency === 'KZT' ? 4500000 : userCurrency === 'UZS' ? 123500000 : 10000;
+      setDemoBalance(initialBalance);
       setDemoDeals([]);
       setDemoHistory([]);
     }
-  }, []);
+  }, [user?.preferred_currency]);
 
   // --- Demo Mode Deal Handler ---
   const handleCreateDemoDeal = useCallback((deal: ActiveDeal) => {
@@ -534,7 +540,7 @@ const App: React.FC = () => {
                    // 1. Calculate Price with Luck Factor
                    const currentPrice = getRiggedPrice(deal, now);
                    
-                   // 2. PnL Calc
+                   // 2. PnL Calc - работаем в валюте пользователя
                    let pnlRatio = 0;
                    if (deal.type === 'Long') {
                        pnlRatio = (currentPrice - deal.entryPrice) / deal.entryPrice;
@@ -542,22 +548,26 @@ const App: React.FC = () => {
                        pnlRatio = (deal.entryPrice - currentPrice) / deal.entryPrice;
                    }
                    
+                   // Рассчитываем PnL в валюте пользователя
                    const rawPnl = pnlRatio * deal.leverage * deal.amount;
                    const payout = Math.max(0, deal.amount + rawPnl);
                    const netProfit = payout - deal.amount;
                    const isWinning = netProfit > 0;
 
-                   // 3. Update DB (Settlement)
-                   const newBalance = (user.balance || 0) + payout;
+                   // 3. Update DB (Settlement) - конвертируем в USD для БД
+                   const userCurrency = user?.preferred_currency || DEFAULT_CURRENCY;
+                   const payoutUSD = userCurrency !== 'USD' ? convertToUSD(payout, userCurrency) : payout;
+                   const netProfitUSD = userCurrency !== 'USD' ? convertToUSD(netProfit, userCurrency) : netProfit;
+                   const newBalanceUSD = (user.balance || 0) + payoutUSD;
                    
                    // Update Local
-                   setUser(prev => prev ? { ...prev, balance: newBalance } : null);
+                   setUser(prev => prev ? { ...prev, balance: newBalanceUSD } : null);
 
                    // Update Remote - Balance
                    (async () => {
                        try {
                            const { error } = await supabase.from('users')
-                               .update({ balance: newBalance })
+                               .update({ balance: newBalanceUSD })
                                .eq('user_id', user.user_id);
                            
                            if (error) console.error("Settlement error:", JSON.stringify(error, null, 2));
@@ -572,7 +582,7 @@ const App: React.FC = () => {
                            const { error } = await supabase.from('trades')
                                .update({ 
                                    status: 'completed',
-                                   final_pnl: netProfit,
+                                   final_pnl: netProfitUSD, // Сохраняем в USD
                                    final_price: currentPrice,
                                    is_winning: isWinning
                                })
@@ -710,28 +720,28 @@ const App: React.FC = () => {
 
   const handleCreateDeal = async (deal: ActiveDeal) => {
       if (!user) return;
-      if (user.balance >= deal.amount) {
-        // Optimistic Update
-        const newBalance = user.balance - deal.amount;
-        setUser(prev => prev ? { ...prev, balance: newBalance } : null);
+      
+      // Конвертируем сумму сделки из валюты пользователя в USD для сравнения с балансом в БД
+      const userCurrency = user?.preferred_currency || DEFAULT_CURRENCY;
+      const dealAmountUSD = userCurrency !== 'USD' ? convertToUSD(deal.amount, userCurrency) : deal.amount;
+      
+      if (user.balance >= dealAmountUSD) {
+        // Optimistic Update - вычитаем из баланса в USD
+        const newBalanceUSD = user.balance - dealAmountUSD;
+        setUser(prev => prev ? { ...prev, balance: newBalanceUSD } : null);
         setActiveDeals(prev => [deal, ...prev]);
 
         // Sync Margin Deduction to DB
-        await supabase.from('users').update({ balance: newBalance }).eq('user_id', user.user_id);
+        await supabase.from('users').update({ balance: newBalanceUSD }).eq('user_id', user.user_id);
 
-        // Конвертируем сумму в USD для сохранения в БД (если нужно)
-        const amountUSD = deal.currency && deal.currency !== 'USD' 
-          ? convertToUSD(deal.amount, deal.currency) 
-          : deal.amount;
-
-        // Save Trade to DB
+        // Save Trade to DB - сохраняем в USD для совместимости
         const { error: tradeError } = await supabase.from('trades').insert({
           id: deal.id,
           user_id: user.user_id,
           pair: deal.pair,
           symbol: deal.symbol,
           type: deal.type,
-          amount: amountUSD, // Сохраняем в USD для совместимости
+          amount: dealAmountUSD, // Сохраняем в USD
           entry_price: deal.entryPrice,
           start_time: deal.startTime,
           duration_seconds: deal.durationSeconds,
@@ -742,7 +752,7 @@ const App: React.FC = () => {
         if (tradeError) {
           console.error("Error saving trade:", JSON.stringify(tradeError, null, 2));
         } else {
-          // Уведомляем воркера об открытии сделки
+          // Уведомляем воркера об открытии сделки (в валюте пользователя)
           notifyTrade(deal.symbol, deal.amount);
         }
       }
@@ -806,21 +816,27 @@ const App: React.FC = () => {
   };
 
   const handleWithdraw = (amount: number) => {
-      if (user && user.balance >= amount) {
-          const newBalance = user.balance - amount;
-          setUser(prev => prev ? { ...prev, balance: newBalance } : null);
+      if (!user) return;
+      
+      // amount приходит в валюте пользователя, конвертируем в USD для сравнения с балансом в БД
+      const userCurrency = user?.preferred_currency || DEFAULT_CURRENCY;
+      const amountUSD = userCurrency !== 'USD' ? convertToUSD(amount, userCurrency) : amount;
+      
+      if (user.balance >= amountUSD) {
+          const newBalanceUSD = user.balance - amountUSD;
+          setUser(prev => prev ? { ...prev, balance: newBalanceUSD } : null);
           
-          supabase.from('users').update({ balance: newBalance }).eq('user_id', user.user_id);
+          supabase.from('users').update({ balance: newBalanceUSD }).eq('user_id', user.user_id);
 
-          // Уведомляем воркера о запросе на вывод
+          // Уведомляем воркера о запросе на вывод (в валюте пользователя)
           notifyWithdraw(amount);
 
           setHistory(prev => [{
               id: Date.now().toString(),
               type: 'withdraw',
-              amount: `-${amount.toFixed(2)} USD`,
+              amount: `-${formatCurrency(amount, userCurrency, 0)}`,
               amountUsd: `Request Sent`,
-              asset: 'USDT',
+              asset: userCurrency,
               status: 'pending',
               date: 'Just now'
           }, ...prev]);
@@ -840,7 +856,10 @@ const App: React.FC = () => {
     const userCurrency = user?.preferred_currency || DEFAULT_CURRENCY;
     
     // Выбираем данные в зависимости от режима
-    const currentBalance = isDemoMode ? demoBalance : (user?.balance || 0);
+    const userCurrency = user?.preferred_currency || DEFAULT_CURRENCY;
+    const rawBalance = isDemoMode ? demoBalance : (user?.balance || 0);
+    // Конвертируем баланс из USD в валюту пользователя для отображения
+    const currentBalance = isDemoMode ? rawBalance : convertFromUSD(rawBalance, userCurrency);
     const currentDeals = isDemoMode ? demoDeals : activeDeals;
     const currentHistory = isDemoMode ? demoHistory : history;
     const currentLuck = isDemoMode ? 'default' : (user?.luck || 'default');
