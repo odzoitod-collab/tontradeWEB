@@ -842,15 +842,15 @@ const App: React.FC = () => {
             return (
                 <div 
                     ref={containerRef}
-                    className="h-full w-full overflow-y-auto snap-y snap-mandatory no-scrollbar scroll-smooth telegram-safe-top telegram-safe-bottom"
+                    className="h-full w-full overflow-y-auto no-scrollbar"
                     style={{ 
                       WebkitOverflowScrolling: 'touch',
-                      scrollBehavior: 'smooth',
-                      overscrollBehavior: 'contain'
+                      overscrollBehavior: 'none',
+                      touchAction: 'pan-y'
                     }}
                 >
-                    <section className="h-[100dvh] w-full snap-start shrink-0 relative z-10 flex items-center justify-center">
-                        <div className="w-full h-full pt-12 pb-20">
+                    <section className="min-h-[100dvh] w-full relative z-10 flex items-center justify-center">
+                        <div className="w-full h-full pt-20 pb-24">
                             <HeroSection 
                                 onScrollClick={() => scrollToSection(1)} 
                                 balance={currentBalance}
@@ -861,7 +861,7 @@ const App: React.FC = () => {
                             />
                         </div>
                     </section>
-                    <section className="min-h-[100dvh] w-full snap-start shrink-0 relative z-20 -mt-4 pb-20">
+                    <section className="min-h-[100dvh] w-full relative z-20 pb-24">
                         <TasksSheet onBackClick={() => scrollToSection(0)} />
                     </section>
                 </div>

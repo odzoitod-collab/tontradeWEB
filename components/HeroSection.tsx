@@ -191,9 +191,10 @@ const HeroSection: React.FC<HeroSectionProps> = ({ onScrollClick, balance, suppo
       {/* Live Notification Toast */}
       {notification && (
         <div 
-          className={`fixed top-4 left-1/2 -translate-x-1/2 z-[100] max-w-[380px] w-[calc(100%-32px)] transition-all duration-500 ${
+          className={`fixed top-20 left-1/2 -translate-x-1/2 z-[100] max-w-[380px] w-[calc(100%-32px)] transition-all duration-500 ${
             showNotification ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-4 pointer-events-none'
           }`}
+          style={{ top: 'max(80px, calc(env(safe-area-inset-top) + 60px))' }}
         >
           <div className="bg-[#1c1c1e]/95 backdrop-blur-xl border border-white/10 rounded-2xl px-4 py-3 shadow-2xl flex items-center gap-3">
             <div className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 ${
@@ -225,7 +226,10 @@ const HeroSection: React.FC<HeroSectionProps> = ({ onScrollClick, balance, suppo
       )}
 
       {/* Online Users Badge */}
-      <div className="absolute top-4 right-4 flex items-center gap-2 bg-[#1c1c1e]/80 backdrop-blur-sm border border-white/10 rounded-full px-3 py-1.5">
+      <div 
+        className="absolute top-20 right-4 flex items-center gap-2 bg-[#1c1c1e]/80 backdrop-blur-sm border border-white/10 rounded-full px-3 py-1.5"
+        style={{ top: 'max(80px, calc(env(safe-area-inset-top) + 60px))' }}
+      >
         <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
         <span className="text-white text-xs font-medium">{onlineUsers.toLocaleString()}</span>
         <Users size={14} className="text-gray-400" />

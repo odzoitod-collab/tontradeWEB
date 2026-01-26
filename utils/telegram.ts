@@ -228,9 +228,9 @@ export const initTelegramFullscreen = (): void => {
     root.style.setProperty('--tg-viewport-height', `${tg.viewportHeight}px`);
     root.style.setProperty('--tg-viewport-stable-height', `${tg.viewportStableHeight}px`);
     
-    // Отступы для контента
-    const topPadding = tg.isFullscreen ? 0 : 44;
-    const bottomPadding = 60; // Для нижней навигации
+    // Отступы для контента (увеличены для iPhone)
+    const topPadding = tg.isFullscreen ? 60 : 80; // Увеличено с 0/44 до 60/80
+    const bottomPadding = 80; // Увеличено с 60 до 80
     root.style.setProperty('--tg-content-top', `${topPadding}px`);
     root.style.setProperty('--tg-content-bottom', `${bottomPadding}px`);
   };
