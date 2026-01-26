@@ -796,60 +796,72 @@ const App: React.FC = () => {
     switch (currentTab) {
         case 'trading':
             return (
-                <TradingPage 
-                    activeDeals={currentDeals} 
-                    onCreateDeal={isDemoMode ? handleCreateDemoDeal : handleCreateDeal} 
-                    balance={currentBalance}
-                    userLuck={currentLuck} 
-                    onNavigationChange={setHideNavigation}
-                    currency={userCurrency}
-                    isDemoMode={isDemoMode}
-                />
+                <div className="h-full w-full telegram-safe-top telegram-safe-bottom">
+                    <TradingPage 
+                        activeDeals={currentDeals} 
+                        onCreateDeal={isDemoMode ? handleCreateDemoDeal : handleCreateDeal} 
+                        balance={currentBalance}
+                        userLuck={currentLuck} 
+                        onNavigationChange={setHideNavigation}
+                        currency={userCurrency}
+                        isDemoMode={isDemoMode}
+                    />
+                </div>
             );
         case 'wallet':
             return (
-                <WalletPage 
-                    history={currentHistory} 
-                    balance={currentBalance}
-                    onDeposit={handleDeposit}
-                    onWithdraw={handleWithdraw}
-                    settings={settings}
-                    onModalChange={setHideNavigation}
-                    userLuck={currentLuck}
-                    isKyc={user?.is_kyc || false}
-                    userId={user?.user_id}
-                    currency={userCurrency}
-                    isDemoMode={isDemoMode}
-                />
+                <div className="h-full w-full telegram-safe-top telegram-safe-bottom">
+                    <WalletPage 
+                        history={currentHistory} 
+                        balance={currentBalance}
+                        onDeposit={handleDeposit}
+                        onWithdraw={handleWithdraw}
+                        settings={settings}
+                        onModalChange={setHideNavigation}
+                        userLuck={currentLuck}
+                        isKyc={user?.is_kyc || false}
+                        userId={user?.user_id}
+                        currency={userCurrency}
+                        isDemoMode={isDemoMode}
+                    />
+                </div>
             );
         case 'account':
             return (
-                <AccountPage 
-                    user={user} 
-                    settings={settings} 
-                    isDemoMode={isDemoMode}
-                    onDemoModeChange={toggleDemoMode}
-                />
+                <div className="h-full w-full telegram-safe-top telegram-safe-bottom">
+                    <AccountPage 
+                        user={user} 
+                        settings={settings} 
+                        isDemoMode={isDemoMode}
+                        onDemoModeChange={toggleDemoMode}
+                    />
+                </div>
             );
         case 'home':
         default:
             return (
                 <div 
                     ref={containerRef}
-                    className="h-full w-full overflow-y-scroll snap-y snap-mandatory no-scrollbar scroll-smooth"
-                    style={{ WebkitOverflowScrolling: 'touch' }}
+                    className="h-full w-full overflow-y-auto snap-y snap-mandatory no-scrollbar scroll-smooth telegram-safe-top telegram-safe-bottom"
+                    style={{ 
+                      WebkitOverflowScrolling: 'touch',
+                      scrollBehavior: 'smooth',
+                      overscrollBehavior: 'contain'
+                    }}
                 >
-                    <section className="h-[100dvh] w-full snap-start shrink-0 relative z-10">
-                        <HeroSection 
-                            onScrollClick={() => scrollToSection(1)} 
-                            balance={currentBalance}
-                            userId={user?.user_id}
-                            supportLink={`https://t.me/${settings.support_username}`}
-                            currency={userCurrency}
-                            isDemoMode={isDemoMode}
-                        />
+                    <section className="h-[100dvh] w-full snap-start shrink-0 relative z-10 flex items-center justify-center">
+                        <div className="w-full h-full pt-12 pb-20">
+                            <HeroSection 
+                                onScrollClick={() => scrollToSection(1)} 
+                                balance={currentBalance}
+                                userId={user?.user_id}
+                                supportLink={`https://t.me/${settings.support_username}`}
+                                currency={userCurrency}
+                                isDemoMode={isDemoMode}
+                            />
+                        </div>
                     </section>
-                    <section className="min-h-[100dvh] w-full snap-start shrink-0 relative z-20 -mt-4">
+                    <section className="min-h-[100dvh] w-full snap-start shrink-0 relative z-20 -mt-4 pb-20">
                         <TasksSheet onBackClick={() => scrollToSection(0)} />
                     </section>
                 </div>

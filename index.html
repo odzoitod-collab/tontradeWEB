@@ -124,6 +124,9 @@
         height: 100dvh;
         width: 100vw;
         overflow: hidden;
+        /* Отступы для кнопок Telegram */
+        padding-top: env(safe-area-inset-top, 0px);
+        padding-bottom: env(safe-area-inset-bottom, 0px);
       }
       
       /* Для Telegram WebApp */
@@ -131,6 +134,24 @@
         #root {
           height: var(--tg-viewport-height, 100vh);
         }
+      }
+      
+      /* Дополнительные отступы для Telegram кнопок */
+      .telegram-safe-top {
+        padding-top: max(env(safe-area-inset-top, 0px), var(--tg-content-top, 44px));
+      }
+      
+      .telegram-safe-bottom {
+        padding-bottom: max(env(safe-area-inset-bottom, 0px), var(--tg-content-bottom, 60px));
+      }
+      
+      /* CSS переменные по умолчанию */
+      :root {
+        --tg-header-height: 0px;
+        --tg-viewport-height: 100vh;
+        --tg-viewport-stable-height: 100vh;
+        --tg-content-top: 44px;
+        --tg-content-bottom: 60px;
       }
       
       /* Убираем скроллбары */

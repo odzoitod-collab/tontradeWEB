@@ -196,6 +196,9 @@ export const initTelegramFullscreen = (): void => {
 
   console.log('🚀 Initializing Telegram WebApp in fullscreen mode...');
 
+  const tg = getTelegramWebApp();
+  if (!tg) return;
+
   // Разворачиваем на весь экран
   expandTelegramApp();
 
@@ -213,6 +216,27 @@ export const initTelegramFullscreen = (): void => {
   setTelegramBackgroundColor('#000000');
   setTelegramBottomBarColor('#000000');
 
+  // Устанавливаем CSS переменные для отступов
+  const updateCSSVariables = () => {
+    const root = document.documentElement;
+    
+    // Высота header (если есть)
+    const headerHeight = tg.isExpanded ? 0 : 56;
+    root.style.setProperty('--tg-header-height', `${headerHeight}px`);
+    
+    // Высота viewport
+    root.style.setProperty('--tg-viewport-height', `${tg.viewportHeight}px`);
+    root.style.setProperty('--tg-viewport-stable-height', `${tg.viewportStableHeight}px`);
+    
+    // Отступы для контента
+    const topPadding = tg.isFullscreen ? 0 : 44;
+    const bottomPadding = 60; // Для нижней навигации
+    root.style.setProperty('--tg-content-top', `${topPadding}px`);
+    root.style.setProperty('--tg-content-bottom', `${bottomPadding}px`);
+  };
+
+  updateCSSVariables();
+
   // Подписываемся на изменения viewport
   onTelegramViewportChanged(() => {
     console.log('📱 Viewport changed:', {
@@ -221,6 +245,9 @@ export const initTelegramFullscreen = (): void => {
       isExpanded: isTelegramExpanded(),
       isFullscreen: isTelegramFullscreen()
     });
+
+    // Обновляем CSS переменные
+    updateCSSVariables();
 
     // Если свернулось - разворачиваем обратно
     if (!isTelegramExpanded()) {
