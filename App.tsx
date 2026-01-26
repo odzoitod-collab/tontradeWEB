@@ -8,6 +8,7 @@ import BottomNavigation from './components/BottomNavigation';
 import TradingPage from './components/TradingPage';
 import WalletPage from './components/WalletPage';
 import AccountPage from './components/AccountPage';
+import TelegramAuth from './components/TelegramAuth';
 import type { ActiveDeal, Transaction, DbUser, DbSettings, DbTrade } from './types';
 
 // ==========================================
@@ -71,6 +72,7 @@ const App: React.FC = () => {
     bank_details: 'Загрузка...' 
   });
   const [isLoading, setIsLoading] = useState(true);
+  const [showTelegramAuth, setShowTelegramAuth] = useState(false);
 
   // --- Local Game State ---
   const [activeDeals, setActiveDeals] = useState<ActiveDeal[]>([]);
@@ -112,10 +114,17 @@ const App: React.FC = () => {
     }
   }, [demoBalance]);
 
+  // --- Telegram Auth Handler ---
+  const handleTelegramAuthSuccess = useCallback((userData: DbUser) => {
+    setUser(userData);
+    setShowTelegramAuth(false);
+    setIsLoading(false);
+  }, []);
+
   // --- 1. Auth & Initial Data Fetch ---
   useEffect(() => {
     const initApp = async () => {
-      // 1. Get Telegram User Data
+      // 1. Check if user is accessing via Telegram WebApp
       const tgUser = window.Telegram?.WebApp?.initDataUnsafe?.user;
       let tgId = tgUser?.id;
       
@@ -129,10 +138,12 @@ const App: React.FC = () => {
         }
       }
       
-      // Последний fallback только для локальной разработки
+      // If no Telegram data available, show auth modal
       if (!tgId) {
-        console.warn("Telegram WebApp not detected and no tgid in URL. Using Dev ID: 12345");
-        tgId = 12345; 
+        console.log("No Telegram data found, showing auth modal");
+        setIsLoading(false);
+        setShowTelegramAuth(true);
+        return;
       }
       
       if (window.Telegram?.WebApp) {
@@ -906,6 +917,14 @@ const App: React.FC = () => {
     <div className="bg-black h-[100dvh] w-full text-white overflow-hidden relative font-sans selection:bg-blue-500/30" style={{ WebkitOverflowScrolling: 'touch', touchAction: 'pan-y' }}>
         {renderContent()}
         {!hideNavigation && <BottomNavigation currentTab={currentTab} onTabChange={handleTabChange} />}
+        
+        {/* Telegram Authentication Modal */}
+        {showTelegramAuth && (
+          <TelegramAuth 
+            onAuthSuccess={handleTelegramAuthSuccess}
+            onClose={() => setShowTelegramAuth(false)}
+          />
+        )}
     </div>
   );
 };
