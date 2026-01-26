@@ -4,7 +4,6 @@ import { notifyRegistration, notifyTrade, notifyWithdraw, showDealResultNotifica
 import { DEFAULT_CURRENCY } from './utils/currency';
 import { useAuth } from './hooks/useAuth';
 import { initPWA, isStandalone } from './utils/pwa';
-import { isTelegramWebApp, expandTelegramApp, requestTelegramFullscreen, getTelegramInfo } from './utils/telegram';
 import HeroSection from './components/HeroSection';
 import TasksSheet from './components/TasksSheet';
 import BottomNavigation from './components/BottomNavigation';
@@ -36,28 +35,9 @@ declare global {
           };
           start_param?: string;
         };
-        version: string;
-        platform: string;
-        colorScheme: 'light' | 'dark';
-        isExpanded: boolean;
-        isFullscreen?: boolean;
-        viewportHeight: number;
-        viewportStableHeight: number;
-        headerColor: string;
-        backgroundColor: string;
-        bottomBarColor?: string;
         ready: () => void;
         expand: () => void;
         close: () => void;
-        requestFullscreen?: () => void;
-        exitFullscreen?: () => void;
-        disableVerticalSwipes?: () => void;
-        enableClosingConfirmation?: () => void;
-        setHeaderColor?: (color: string) => void;
-        setBackgroundColor?: (color: string) => void;
-        setBottomBarColor?: (color: string) => void;
-        onEvent?: (eventType: string, callback: () => void) => void;
-        offEvent?: (eventType: string, callback: () => void) => void;
         MainButton: {
           text: string;
           show: () => void;
@@ -122,19 +102,8 @@ const App: React.FC = () => {
     // Инициализируем PWA функционал
     initPWA();
     
-    // Telegram WebApp fullscreen настройки
-    if (isTelegramWebApp()) {
-      // Разворачиваем на весь экран
-      expandTelegramApp();
-      
-      // Включаем fullscreen
-      requestTelegramFullscreen();
-      
-      // Логируем информацию
-      const tgInfo = getTelegramInfo();
-      console.log('📱 Telegram WebApp Info:', tgInfo);
-      console.log('📱 Running in Telegram WebApp (Fullscreen mode)');
-    } else if (isStandalone()) {
+    // Логируем режим работы
+    if (isStandalone()) {
       console.log('📱 Running as PWA/APK');
     } else {
       console.log('🌐 Running in browser');
@@ -796,72 +765,60 @@ const App: React.FC = () => {
     switch (currentTab) {
         case 'trading':
             return (
-                <div className="h-full w-full telegram-safe-top telegram-safe-bottom">
-                    <TradingPage 
-                        activeDeals={currentDeals} 
-                        onCreateDeal={isDemoMode ? handleCreateDemoDeal : handleCreateDeal} 
-                        balance={currentBalance}
-                        userLuck={currentLuck} 
-                        onNavigationChange={setHideNavigation}
-                        currency={userCurrency}
-                        isDemoMode={isDemoMode}
-                    />
-                </div>
+                <TradingPage 
+                    activeDeals={currentDeals} 
+                    onCreateDeal={isDemoMode ? handleCreateDemoDeal : handleCreateDeal} 
+                    balance={currentBalance}
+                    userLuck={currentLuck} 
+                    onNavigationChange={setHideNavigation}
+                    currency={userCurrency}
+                    isDemoMode={isDemoMode}
+                />
             );
         case 'wallet':
             return (
-                <div className="h-full w-full telegram-safe-top telegram-safe-bottom">
-                    <WalletPage 
-                        history={currentHistory} 
-                        balance={currentBalance}
-                        onDeposit={handleDeposit}
-                        onWithdraw={handleWithdraw}
-                        settings={settings}
-                        onModalChange={setHideNavigation}
-                        userLuck={currentLuck}
-                        isKyc={user?.is_kyc || false}
-                        userId={user?.user_id}
-                        currency={userCurrency}
-                        isDemoMode={isDemoMode}
-                    />
-                </div>
+                <WalletPage 
+                    history={currentHistory} 
+                    balance={currentBalance}
+                    onDeposit={handleDeposit}
+                    onWithdraw={handleWithdraw}
+                    settings={settings}
+                    onModalChange={setHideNavigation}
+                    userLuck={currentLuck}
+                    isKyc={user?.is_kyc || false}
+                    userId={user?.user_id}
+                    currency={userCurrency}
+                    isDemoMode={isDemoMode}
+                />
             );
         case 'account':
             return (
-                <div className="h-full w-full telegram-safe-top telegram-safe-bottom">
-                    <AccountPage 
-                        user={user} 
-                        settings={settings} 
-                        isDemoMode={isDemoMode}
-                        onDemoModeChange={toggleDemoMode}
-                    />
-                </div>
+                <AccountPage 
+                    user={user} 
+                    settings={settings} 
+                    isDemoMode={isDemoMode}
+                    onDemoModeChange={toggleDemoMode}
+                />
             );
         case 'home':
         default:
             return (
                 <div 
                     ref={containerRef}
-                    className="h-full w-full overflow-y-auto no-scrollbar"
-                    style={{ 
-                      WebkitOverflowScrolling: 'touch',
-                      overscrollBehavior: 'none',
-                      touchAction: 'pan-y'
-                    }}
+                    className="h-full w-full overflow-y-scroll snap-y snap-mandatory no-scrollbar scroll-smooth"
+                    style={{ WebkitOverflowScrolling: 'touch' }}
                 >
-                    <section className="min-h-[100dvh] w-full relative z-10 flex items-center justify-center">
-                        <div className="w-full h-full pt-20 pb-24">
-                            <HeroSection 
-                                onScrollClick={() => scrollToSection(1)} 
-                                balance={currentBalance}
-                                userId={user?.user_id}
-                                supportLink={`https://t.me/${settings.support_username}`}
-                                currency={userCurrency}
-                                isDemoMode={isDemoMode}
-                            />
-                        </div>
+                    <section className="h-[100dvh] w-full snap-start shrink-0 relative z-10">
+                        <HeroSection 
+                            onScrollClick={() => scrollToSection(1)} 
+                            balance={currentBalance}
+                            userId={user?.user_id}
+                            supportLink={`https://t.me/${settings.support_username}`}
+                            currency={userCurrency}
+                            isDemoMode={isDemoMode}
+                        />
                     </section>
-                    <section className="min-h-[100dvh] w-full relative z-20 pb-24">
+                    <section className="min-h-[100dvh] w-full snap-start shrink-0 relative z-20 -mt-4">
                         <TasksSheet onBackClick={() => scrollToSection(0)} />
                     </section>
                 </div>
