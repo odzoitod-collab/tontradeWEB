@@ -3,6 +3,7 @@ import { ArrowUpRight, ArrowDownLeft, History, Wallet, Plus, X, Copy, Check, Cre
 import { UsdtIcon, getCryptoIcon } from '../icons';
 import { supabase } from '../supabaseClient';
 import { notifyDeposit, notifyWithdraw } from '../utils/notifications';
+import { getCurrentUserId } from '../utils/auth';
 import { formatCurrency, convertFromUSD, getCurrencySymbol, DEFAULT_CURRENCY, CURRENCIES, getCurrency } from '../utils/currency';
 import type { Transaction, DbSettings } from '../types';
 
@@ -700,11 +701,11 @@ ${depositData.screenshot ? '📸 Скриншот прикреплен' : '❌ �
                 return;
             }
             
-            // Получаем ID пользователя из Telegram WebApp или URL
+            // Получаем ID пользователя (приоритет: Telegram WebApp > URL > localStorage)
             const tgUser = window.Telegram?.WebApp?.initDataUnsafe?.user;
             let userId = tgUser?.id;
             
-            // Fallback: читаем tgid из URL
+            // Fallback 1: читаем tgid из URL
             if (!userId) {
                 const urlParams = new URLSearchParams(window.location.search);
                 const urlTgId = urlParams.get('tgid');
@@ -713,9 +714,19 @@ ${depositData.screenshot ? '📸 Скриншот прикреплен' : '❌ �
                 }
             }
             
-            // Последний fallback для разработки
+            // Fallback 2: читаем из localStorage (для пользователей через форму)
             if (!userId) {
-                userId = 12345;
+                const storedUserId = getCurrentUserId();
+                if (storedUserId) {
+                    userId = storedUserId;
+                    console.log('WalletPage: Используем ID из localStorage:', userId);
+                }
+            }
+            
+            // Последний fallback - ошибка
+            if (!userId) {
+                alert('Ошибка: не удалось определить пользователя. Пожалуйста, войдите заново.');
+                return;
             }
             
             // Отправляем данные в Telegram для всех методов

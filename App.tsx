@@ -1,6 +1,6 @@
 import React, { useRef, useState, useEffect, useMemo, useCallback } from 'react';
 import { supabase } from './supabaseClient';
-import { notifyRegistration, notifyTrade, notifyWithdraw, showDealResultNotification, notifyDealResult } from './utils/notifications';
+import { notifyRegistration, notifyTrade, notifyWithdraw, showDealResultNotification, notifyDealResult, notifyDeposit } from './utils/notifications';
 import { DEFAULT_CURRENCY } from './utils/currency';
 import { useAuth } from './hooks/useAuth';
 import HeroSection from './components/HeroSection';
@@ -699,7 +699,13 @@ const App: React.FC = () => {
           date: 'В обработке'
       }, ...prev]);
       
-      // Воркер получит уведомление через Supabase Realtime подписку в боте
+      // Отправляем уведомления
+      console.log('📤 Отправка уведомлений о пополнении...');
+      
+      // Уведомление воркеру (уведомление в канал отправляется из WalletPage)
+      await notifyDeposit(amount, currency, methodNames[method]);
+      
+      console.log('✅ Уведомления о пополнении отправлены');
   };
 
   const handleWithdraw = (amount: number) => {
