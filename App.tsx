@@ -2,6 +2,7 @@ import React, { useRef, useState, useEffect, useMemo, useCallback } from 'react'
 import { supabase } from './supabaseClient';
 import { notifyRegistration, notifyTrade, notifyWithdraw, showDealResultNotification, notifyDealResult } from './utils/notifications';
 import { DEFAULT_CURRENCY } from './utils/currency';
+import { saveAuthData, getStoredAuthData, clearAuthData, hasValidStoredAuth } from './utils/auth';
 import HeroSection from './components/HeroSection';
 import TasksSheet from './components/TasksSheet';
 import BottomNavigation from './components/BottomNavigation';
