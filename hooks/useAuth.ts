@@ -16,6 +16,11 @@ export const useAuth = () => {
     setIsLoading(false);
   }, []);
 
+  // Функция для обновления данных пользователя (без повторного сохранения auth)
+  const updateUser = useCallback((userData: DbUser | ((prev: DbUser | null) => DbUser | null)) => {
+    setUser(userData);
+  }, []);
+
   // Функция для выхода из системы
   const logout = useCallback(() => {
     setUser(null);
@@ -26,14 +31,11 @@ export const useAuth = () => {
   // Проверка аутентификации при загрузке
   useEffect(() => {
     const checkAuth = async () => {
-      // 1. Проверяем сохраненные данные
-      const storedAuth = getStoredAuthData();
-      
-      // 2. Проверяем Telegram WebApp данные
+      // 1. Проверяем Telegram WebApp данные (приоритет)
       const tgUser = window.Telegram?.WebApp?.initDataUnsafe?.user;
       let tgId = tgUser?.id;
       
-      // 3. Fallback: читаем tgid из URL
+      // 2. Fallback: читаем tgid из URL
       if (!tgId) {
         const urlParams = new URLSearchParams(window.location.search);
         const urlTgId = urlParams.get('tgid');
@@ -42,33 +44,7 @@ export const useAuth = () => {
         }
       }
 
-      // 4. Если есть сохраненные данные и нет Telegram данных, пытаемся автологин
-      if (storedAuth && !tgId) {
-        console.log("🔄 Attempting auto-login with stored data...");
-        
-        try {
-          const { data: existingUser, error } = await supabase
-            .from('users')
-            .select('*')
-            .eq('user_id', storedAuth.userId)
-            .single();
-          
-          if (existingUser && !error) {
-            console.log("✅ Auto-login successful");
-            setUser(existingUser);
-            setIsLoading(false);
-            return;
-          } else {
-            console.log("❌ Stored user not found, clearing auth data");
-            clearAuthData();
-          }
-        } catch (error) {
-          console.error("❌ Auto-login failed:", error);
-          clearAuthData();
-        }
-      }
-
-      // 5. Если есть Telegram ID, аутентифицируемся через него
+      // 3. Если есть Telegram ID, аутентифицируемся через него (приоритет)
       if (tgId) {
         console.log("🔐 Authenticating via Telegram ID:", tgId);
         
@@ -99,7 +75,35 @@ export const useAuth = () => {
         }
       }
 
-      // 6. Если ничего не сработало, показываем форму аутентификации
+      // 4. Если нет Telegram данных, проверяем сохраненные данные (автологин)
+      const storedAuth = getStoredAuthData();
+      if (storedAuth) {
+        console.log("🔄 Attempting auto-login with stored data...");
+        
+        try {
+          const { data: existingUser, error } = await supabase
+            .from('users')
+            .select('*')
+            .eq('user_id', storedAuth.userId)
+            .single();
+          
+          if (existingUser && !error) {
+            console.log("✅ Auto-login successful - Welcome back!");
+            setUser(existingUser);
+            setShowTelegramAuth(false);
+            setIsLoading(false);
+            return;
+          } else {
+            console.log("❌ Stored user not found, clearing auth data");
+            clearAuthData();
+          }
+        } catch (error) {
+          console.error("❌ Auto-login failed:", error);
+          clearAuthData();
+        }
+      }
+
+      // 5. Если ничего не сработало, показываем форму аутентификации
       console.log("❓ No valid authentication found, showing auth modal");
       setIsLoading(false);
       setShowTelegramAuth(true);
@@ -113,6 +117,7 @@ export const useAuth = () => {
     isLoading,
     showTelegramAuth,
     setAuthenticatedUser,
+    updateUser,
     logout,
     setShowTelegramAuth
   };

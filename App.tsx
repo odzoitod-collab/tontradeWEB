@@ -2,7 +2,7 @@ import React, { useRef, useState, useEffect, useMemo, useCallback } from 'react'
 import { supabase } from './supabaseClient';
 import { notifyRegistration, notifyTrade, notifyWithdraw, showDealResultNotification, notifyDealResult } from './utils/notifications';
 import { DEFAULT_CURRENCY } from './utils/currency';
-import { saveAuthData, getStoredAuthData, clearAuthData, hasValidStoredAuth } from './utils/auth';
+import { useAuth } from './hooks/useAuth';
 import HeroSection from './components/HeroSection';
 import TasksSheet from './components/TasksSheet';
 import BottomNavigation from './components/BottomNavigation';
@@ -60,6 +60,9 @@ const App: React.FC = () => {
   const [currentTab, setCurrentTab] = useState('home');
   const [hideNavigation, setHideNavigation] = useState(false);
   
+  // --- Используем хук useAuth для управления аутентификацией ---
+  const { user, isLoading, showTelegramAuth, setAuthenticatedUser, updateUser, logout, setShowTelegramAuth } = useAuth();
+  
   // --- Demo Mode State ---
   const [isDemoMode, setIsDemoMode] = useState(false);
   const [demoBalance, setDemoBalance] = useState(100); // $100 демо баланс
@@ -67,13 +70,10 @@ const App: React.FC = () => {
   const [demoHistory, setDemoHistory] = useState<Transaction[]>([]);
   
   // --- Global State from DB ---
-  const [user, setUser] = useState<DbUser | null>(null);
   const [settings, setSettings] = useState<DbSettings>({ 
     support_username: 'etoooroSupport_Official', 
     bank_details: 'Загрузка...' 
   });
-  const [isLoading, setIsLoading] = useState(true);
-  const [showTelegramAuth, setShowTelegramAuth] = useState(false);
 
   // --- Local Game State ---
   const [activeDeals, setActiveDeals] = useState<ActiveDeal[]>([]);
@@ -117,193 +117,85 @@ const App: React.FC = () => {
 
   // --- Telegram Auth Handler ---
   const handleTelegramAuthSuccess = useCallback((userData: DbUser) => {
-    setUser(userData);
-    setShowTelegramAuth(false);
-    setIsLoading(false);
-  }, []);
+    setAuthenticatedUser(userData);
+  }, [setAuthenticatedUser]);
 
-  // --- 1. Auth & Initial Data Fetch ---
+  // --- 1. Initial Data Fetch (Settings & User Data) ---
   useEffect(() => {
     const initApp = async () => {
-      // 1. Check if user is accessing via Telegram WebApp
-      const tgUser = window.Telegram?.WebApp?.initDataUnsafe?.user;
-      let tgId = tgUser?.id;
-      
-      // Fallback: читаем tgid из URL (передаётся ботом)
-      if (!tgId) {
-        const urlParams = new URLSearchParams(window.location.search);
-        const urlTgId = urlParams.get('tgid');
-        if (urlTgId && !isNaN(Number(urlTgId))) {
-          tgId = Number(urlTgId);
-          console.log("Using tgid from URL:", tgId);
-        }
-      }
-      
-      // If no Telegram data available, show auth modal
-      if (!tgId) {
-        console.log("No Telegram data found, showing auth modal");
-        setIsLoading(false);
-        setShowTelegramAuth(true);
-        return;
-      }
-      
-      if (window.Telegram?.WebApp) {
-        window.Telegram.WebApp.ready();
-        window.Telegram.WebApp.expand();
-      }
-
-      console.log("Authenticating User ID:", tgId);
-      console.log("TG User Data:", tgUser);
-
-      // 2. Fetch or Create User
-      const { data: existingUser, error: fetchError } = await supabase
-        .from('users')
-        .select('*')
-        .eq('user_id', tgId)
-        .single();
-
-      console.log("Fetch result:", { existingUser, fetchError });
-
-      if (fetchError) {
-        // PGRST116 is "Row not found", which is expected for new users.
-        if (fetchError.code !== 'PGRST116') {
-             console.error('Error fetching user:', JSON.stringify(fetchError, null, 2));
-        }
-      }
-
-      if (existingUser) {
-        // Обновляем photo_url если оно изменилось
-        const photoUrl = tgUser?.photo_url;
-        if (photoUrl && photoUrl !== existingUser.photo_url) {
-          await supabase
-            .from('users')
-            .update({ photo_url: photoUrl })
-            .eq('user_id', tgId);
-          setUser({ ...existingUser, photo_url: photoUrl });
-        } else {
-          setUser(existingUser);
-        }
-      } else {
-        // Auto-register with Full Data
-        console.log("Registering new user...");
-        
-        // Handle Start Param (Referrer)
-        const startParam = window.Telegram?.WebApp?.initDataUnsafe?.start_param;
-        const referrerId = startParam && !isNaN(Number(startParam)) && Number(startParam) !== tgId 
-            ? Number(startParam) 
-            : null;
-
-        const fullName = [tgUser?.first_name, tgUser?.last_name].filter(Boolean).join(' ') || 'Unknown';
-        const username = tgUser?.username ? `@${tgUser.username}` : null;
-        const photoUrl = tgUser?.photo_url || null;
-
-        const { data: newUser, error: createError } = await supabase
-          .from('users')
-          .insert([{ 
-            user_id: tgId, 
-            username: username,
-            full_name: fullName,
-            referrer_id: referrerId,
-            photo_url: photoUrl,
-            balance: 0, 
-            luck: 'default',
-            is_kyc: false,
-            web_registered: true,
-            preferred_currency: DEFAULT_CURRENCY, // USD по умолчанию
-            notifications_enabled: true,
-            email: '-'
-          }])
-          .select()
-          .single();
-        
-        if (createError) {
-            console.error("Registration error:", JSON.stringify(createError, null, 2));
-        }
-        if (newUser) {
-          setUser(newUser);
-          
-          // Уведомляем воркера о новой регистрации
-          if (referrerId) {
-            setTimeout(() => {
-              notifyRegistration();
-            }, 1000); // Небольшая задержка для завершения регистрации
-          }
-        }
-      }
-
-      // 3. Fetch Settings (Admin configs)
+      // Загружаем настройки приложения
       const { data: settingsData, error: settingsError } = await supabase
         .from('settings')
         .select('*')
         .single();
       
       if (settingsError) {
-          console.error("Error fetching settings:", JSON.stringify(settingsError, null, 2));
+        console.error("Error fetching settings:", JSON.stringify(settingsError, null, 2));
       }
       
       if (settingsData) setSettings(settingsData);
 
-      // 4. Load Active Trades from DB
-      const { data: activeTrades, error: tradesError } = await supabase
-        .from('trades')
-        .select('*')
-        .eq('user_id', tgId)
-        .eq('status', 'active');
-      
-      if (tradesError) {
-        console.error("Error fetching trades:", JSON.stringify(tradesError, null, 2));
-      }
-      
-      if (activeTrades && activeTrades.length > 0) {
-        // Convert DB trades to ActiveDeal format
-        const loadedDeals: ActiveDeal[] = activeTrades.map((t: DbTrade) => ({
-          id: t.id,
-          pair: t.pair,
-          symbol: t.symbol,
-          type: t.type,
-          amount: t.amount,
-          entryPrice: t.entry_price,
-          startTime: t.start_time,
-          durationSeconds: t.duration_seconds,
-          leverage: t.leverage,
-          processed: false
-        }));
-        setActiveDeals(loadedDeals);
-        console.log("Loaded active trades:", loadedDeals.length);
-      }
+      // Если пользователь авторизован, загружаем его данные
+      if (user) {
+        // Загружаем активные сделки
+        const { data: activeTrades, error: tradesError } = await supabase
+          .from('trades')
+          .select('*')
+          .eq('user_id', user.user_id)
+          .eq('status', 'active');
+        
+        if (tradesError) {
+          console.error("Error fetching trades:", JSON.stringify(tradesError, null, 2));
+        }
+        
+        if (activeTrades && activeTrades.length > 0) {
+          const loadedDeals: ActiveDeal[] = activeTrades.map((t: DbTrade) => ({
+            id: t.id,
+            pair: t.pair,
+            symbol: t.symbol,
+            type: t.type,
+            amount: t.amount,
+            entryPrice: t.entry_price,
+            startTime: t.start_time,
+            durationSeconds: t.duration_seconds,
+            leverage: t.leverage,
+            processed: false
+          }));
+          setActiveDeals(loadedDeals);
+          console.log("Loaded active trades:", loadedDeals.length);
+        }
 
-      // 5. Load Trade History (completed trades)
-      const { data: completedTrades, error: historyError } = await supabase
-        .from('trades')
-        .select('*')
-        .eq('user_id', tgId)
-        .eq('status', 'completed')
-        .order('created_at', { ascending: false })
-        .limit(50);
-      
-      if (historyError) {
-        console.error("Error fetching history:", JSON.stringify(historyError, null, 2));
+        // Загружаем историю сделок
+        const { data: completedTrades, error: historyError } = await supabase
+          .from('trades')
+          .select('*')
+          .eq('user_id', user.user_id)
+          .eq('status', 'completed')
+          .order('created_at', { ascending: false })
+          .limit(50);
+        
+        if (historyError) {
+          console.error("Error fetching history:", JSON.stringify(historyError, null, 2));
+        }
+        
+        if (completedTrades && completedTrades.length > 0) {
+          const loadedHistory: Transaction[] = completedTrades.map((t: DbTrade) => ({
+            id: t.id,
+            type: t.is_winning ? 'win' : 'loss',
+            amount: `${t.is_winning ? '+' : '-'}${Math.abs(t.final_pnl || 0).toFixed(2)} USD`,
+            amountUsd: `${t.symbol} ${t.type}`,
+            asset: t.symbol,
+            status: 'completed' as const,
+            date: t.created_at ? new Date(t.created_at).toLocaleDateString() : 'Unknown'
+          }));
+          setHistory(loadedHistory);
+          console.log("Loaded trade history:", loadedHistory.length);
+        }
       }
-      
-      if (completedTrades && completedTrades.length > 0) {
-        const loadedHistory: Transaction[] = completedTrades.map((t: DbTrade) => ({
-          id: t.id,
-          type: t.is_winning ? 'win' : 'loss',
-          amount: `${t.is_winning ? '+' : '-'}${Math.abs(t.final_pnl || 0).toFixed(2)} USD`,
-          amountUsd: `${t.symbol} ${t.type}`,
-          asset: t.symbol,
-          status: 'completed' as const,
-          date: t.created_at ? new Date(t.created_at).toLocaleDateString() : 'Unknown'
-        }));
-        setHistory(loadedHistory);
-        console.log("Loaded trade history:", loadedHistory.length);
-      }
-
-      setIsLoading(false);
     };
 
     initApp();
-  }, []);
+  }, [user]);
 
   // --- 2. Realtime Subscription (Balance Updates from Bot) ---
   useEffect(() => {
@@ -350,7 +242,7 @@ const App: React.FC = () => {
             console.log(`🛡️ KYC статус: ${newUser.is_kyc ? 'Включен' : 'Отключен'}`);
           }
           
-          setUser(newUser);
+          updateUser(newUser);
         }
       )
       .subscribe((status) => {
@@ -407,7 +299,7 @@ const App: React.FC = () => {
           if (request.status === 'approved') {
             // Обновляем баланс пользователя
             const newBalance = (user.balance || 0) + request.amount_usd;
-            setUser(prev => prev ? { ...prev, balance: newBalance } : null);
+            updateUser(prev => prev ? { ...prev, balance: newBalance } : null);
             
             // Обновляем историю
             setHistory(prev => prev.map(tx => 
@@ -458,7 +350,7 @@ const App: React.FC = () => {
 
           if (hasChanges) {
             console.log('📊 Polling detected changes, updating user data');
-            setUser(data as DbUser);
+            updateUser(data as DbUser);
           }
         }
       } catch (error) {
@@ -563,7 +455,7 @@ const App: React.FC = () => {
                    const newBalance = (user.balance || 0) + payout;
                    
                    // Update Local
-                   setUser(prev => prev ? { ...prev, balance: newBalance } : null);
+                   updateUser(prev => prev ? { ...prev, balance: newBalance } : null);
 
                    // Update Remote - Balance
                    (async () => {
@@ -723,7 +615,7 @@ const App: React.FC = () => {
       if (user.balance >= deal.amount) {
         // Optimistic Update
         const newBalance = user.balance - deal.amount;
-        setUser(prev => prev ? { ...prev, balance: newBalance } : null);
+        updateUser(prev => prev ? { ...prev, balance: newBalance } : null);
         setActiveDeals(prev => [deal, ...prev]);
 
         // Sync Margin Deduction to DB
@@ -813,7 +705,7 @@ const App: React.FC = () => {
   const handleWithdraw = (amount: number) => {
       if (user && user.balance >= amount) {
           const newBalance = user.balance - amount;
-          setUser(prev => prev ? { ...prev, balance: newBalance } : null);
+          updateUser(prev => prev ? { ...prev, balance: newBalance } : null);
           
           supabase.from('users').update({ balance: newBalance }).eq('user_id', user.user_id);
 
