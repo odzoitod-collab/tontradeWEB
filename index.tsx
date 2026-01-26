@@ -1,6 +1,10 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
+import { initTelegramFullscreen } from './utils/telegram';
+
+// Инициализация Telegram WebApp в fullscreen режиме
+initTelegramFullscreen();
 
 const rootElement = document.getElementById('root');
 if (!rootElement) {

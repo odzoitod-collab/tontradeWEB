@@ -3,6 +3,8 @@ import { supabase } from './supabaseClient';
 import { notifyRegistration, notifyTrade, notifyWithdraw, showDealResultNotification, notifyDealResult, notifyDeposit } from './utils/notifications';
 import { DEFAULT_CURRENCY } from './utils/currency';
 import { useAuth } from './hooks/useAuth';
+import { initPWA, isStandalone } from './utils/pwa';
+import { isTelegramWebApp, expandTelegramApp, requestTelegramFullscreen, getTelegramInfo } from './utils/telegram';
 import HeroSection from './components/HeroSection';
 import TasksSheet from './components/TasksSheet';
 import BottomNavigation from './components/BottomNavigation';
@@ -34,9 +36,28 @@ declare global {
           };
           start_param?: string;
         };
+        version: string;
+        platform: string;
+        colorScheme: 'light' | 'dark';
+        isExpanded: boolean;
+        isFullscreen?: boolean;
+        viewportHeight: number;
+        viewportStableHeight: number;
+        headerColor: string;
+        backgroundColor: string;
+        bottomBarColor?: string;
         ready: () => void;
         expand: () => void;
         close: () => void;
+        requestFullscreen?: () => void;
+        exitFullscreen?: () => void;
+        disableVerticalSwipes?: () => void;
+        enableClosingConfirmation?: () => void;
+        setHeaderColor?: (color: string) => void;
+        setBackgroundColor?: (color: string) => void;
+        setBottomBarColor?: (color: string) => void;
+        onEvent?: (eventType: string, callback: () => void) => void;
+        offEvent?: (eventType: string, callback: () => void) => void;
         MainButton: {
           text: string;
           show: () => void;
@@ -94,6 +115,30 @@ const App: React.FC = () => {
   const handleTabChange = useCallback((tab: string) => {
     setCurrentTab(tab);
     setHideNavigation(false); // Всегда показываем навигацию при смене вкладки
+  }, []);
+
+  // --- PWA Initialization ---
+  useEffect(() => {
+    // Инициализируем PWA функционал
+    initPWA();
+    
+    // Telegram WebApp fullscreen настройки
+    if (isTelegramWebApp()) {
+      // Разворачиваем на весь экран
+      expandTelegramApp();
+      
+      // Включаем fullscreen
+      requestTelegramFullscreen();
+      
+      // Логируем информацию
+      const tgInfo = getTelegramInfo();
+      console.log('📱 Telegram WebApp Info:', tgInfo);
+      console.log('📱 Running in Telegram WebApp (Fullscreen mode)');
+    } else if (isStandalone()) {
+      console.log('📱 Running as PWA/APK');
+    } else {
+      console.log('🌐 Running in browser');
+    }
   }, []);
 
   // --- Demo Mode Toggle ---
