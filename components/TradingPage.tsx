@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, useCallback, memo } from 'react';
+import React, { useState, useMemo, useEffect, useCallback, memo, useRef } from 'react';
 import { Search, X, TrendingUp, TrendingDown, ChevronLeft, Minus, Plus, Clock, Zap, AlertTriangle, Star, BarChart3, ArrowLeft, Wallet, History, Maximize2, Minimize2 } from 'lucide-react';
 import { getCryptoIcon } from '../icons';
 import { formatCurrency, convertFromUSD, getCurrencySymbol, DEFAULT_CURRENCY, getCurrency } from '../utils/currency';
@@ -12,6 +12,9 @@ interface TradingPageProps {
     onNavigationChange?: (hide: boolean) => void;
     currency?: string;
     isDemoMode?: boolean;
+    /** Код элемента (символ пары) для открытия по URL: ?tab=trading&pair=TON */
+    initialPair?: string | null;
+    onInitialPairConsumed?: () => void;
 }
 
 const PAIRS: CryptoPair[] = [
@@ -53,24 +56,6 @@ const PAIRS: CryptoPair[] = [
   { id: '114', symbol: 'DIS', name: 'Walt Disney Co.', price: '98.76', change: '-0.78%', isPositive: false, isFavorite: false, color: '#113CCF', category: 'stocks' },
   { id: '115', symbol: 'NKE', name: 'Nike Inc.', price: '78.92', change: '+1.45%', isPositive: true, isFavorite: false, color: '#111111', category: 'stocks' },
   
-  // НФТ коллекции - Топовые
-  { id: '201', symbol: 'BAYC', name: 'Bored Ape Yacht Club', price: '12.45', change: '+5.20%', isPositive: true, isFavorite: true, color: '#8B4513', category: 'nft' },
-  { id: '202', symbol: 'PUNK', name: 'CryptoPunks', price: '45.67', change: '+3.80%', isPositive: true, isFavorite: false, color: '#FF6B35', category: 'nft' },
-  { id: '203', symbol: 'AZUKI', name: 'Azuki', price: '8.92', change: '-2.10%', isPositive: false, isFavorite: false, color: '#FF69B4', category: 'nft' },
-  { id: '204', symbol: 'MAYC', name: 'Mutant Ape Yacht Club', price: '6.78', change: '+4.15%', isPositive: true, isFavorite: true, color: '#9B59B6', category: 'nft' },
-  { id: '205', symbol: 'DOODLE', name: 'Doodles', price: '3.45', change: '+2.85%', isPositive: true, isFavorite: false, color: '#F39C12', category: 'nft' },
-  { id: '206', symbol: 'CLONE', name: 'CloneX', price: '4.23', change: '-1.25%', isPositive: false, isFavorite: false, color: '#E74C3C', category: 'nft' },
-  
-  // НФТ коллекции - Игровые
-  { id: '207', symbol: 'AXIE', name: 'Axie Infinity', price: '2.89', change: '+6.45%', isPositive: true, isFavorite: false, color: '#1ABC9C', category: 'nft' },
-  { id: '208', symbol: 'SAND', name: 'The Sandbox', price: '1.67', change: '+3.92%', isPositive: true, isFavorite: true, color: '#3498DB', category: 'nft' },
-  { id: '209', symbol: 'MANA', name: 'Decentraland', price: '2.34', change: '-0.85%', isPositive: false, isFavorite: false, color: '#FF7675', category: 'nft' },
-  
-  // НФТ коллекции - Арт
-  { id: '210', symbol: 'ART', name: 'Art Blocks Curated', price: '7.56', change: '+1.75%', isPositive: true, isFavorite: false, color: '#6C5CE7', category: 'nft' },
-  { id: '211', symbol: 'FIDENZA', name: 'Fidenza', price: '15.23', change: '+8.12%', isPositive: true, isFavorite: true, color: '#A29BFE', category: 'nft' },
-  { id: '212', symbol: 'CHROMIE', name: 'Chromie Squiggle', price: '9.87', change: '+2.45%', isPositive: true, isFavorite: false, color: '#FD79A8', category: 'nft' },
-  
   // Сырье
   { id: '301', symbol: 'GOLD', name: 'Золото', price: '2018.45', change: '+0.65%', isPositive: true, isFavorite: true, color: '#FFD700', category: 'commodities' },
   { id: '302', symbol: 'OIL', name: 'Нефть WTI', price: '78.92', change: '-1.25%', isPositive: false, isFavorite: false, color: '#000000', category: 'commodities' },
@@ -78,11 +63,11 @@ const PAIRS: CryptoPair[] = [
 ];
 
 const TIME_OPTIONS = [
-  { label: '10с', value: 10 },
-  { label: '30с', value: 30 },
-  { label: '1м', value: 60 },
-  { label: '2м', value: 120 },
-  { label: '5м', value: 300 },
+  { label: '10 сек', short: '10с', value: 10 },
+  { label: '30 сек', short: '30с', value: 30 },
+  { label: '1 мин', short: '1м', value: 60 },
+  { label: '2 мин', short: '2м', value: 120 },
+  { label: '5 мин', short: '5м', value: 300 },
 ];
 
 // Фейковые активные позиции других трейдеров
@@ -190,20 +175,6 @@ const CryptoIcon = memo(({ symbol, size = 44 }: { symbol: string; size?: number 
       case 'DIS': return renderImg("https://logomaster.com.ua/brand/walt.jpg");
       case 'NKE': return renderImg("https://images.prom.ua/2536264820_w600_h600_swoosh-istoriya.jpg", "bg-white");
       
-      // НФТ
-      case 'BAYC': return renderEmoji("🐵", "#8B4513");
-      case 'PUNK': return renderEmoji("👾", "#FF6B35");
-      case 'AZUKI': return renderEmoji("🌸", "#FF69B4");
-      case 'MAYC': return renderEmoji("🧬", "#9B59B6");
-      case 'DOODLE': return renderEmoji("🎨", "#F39C12");
-      case 'CLONE': return renderEmoji("👤", "#E74C3C");
-      case 'AXIE': return renderEmoji("🎮", "#1ABC9C");
-      case 'SAND': return renderEmoji("🏖️", "#3498DB");
-      case 'MANA': return renderEmoji("🌐", "#FF7675");
-      case 'ART': return renderEmoji("🖼️", "#6C5CE7");
-      case 'FIDENZA': return renderEmoji("🎭", "#A29BFE");
-      case 'CHROMIE': return renderEmoji("🌈", "#FD79A8");
-      
       // Сырье
       case 'GOLD': return renderImg("https://cdn3d.iconscout.com/3d/premium/thumb/gold-3d-icon-png-download-10823618.png");
       case 'OIL': return renderImg("https://img.freepik.com/premium-vector/black-oil-barrel-with-yellow-circle-black-oil-drop-symbol-oil-drum-container-3d-vector-icon_365941-1448.jpg?semt=ais_hybrid&w=740&q=80");
@@ -226,7 +197,7 @@ const CryptoIcon = memo(({ symbol, size = 44 }: { symbol: string; size?: number 
 });
 
 // --- Main Component ---
-const TradingPage: React.FC<TradingPageProps> = ({ activeDeals, onCreateDeal, balance, userLuck, onNavigationChange, currency = DEFAULT_CURRENCY, isDemoMode = false }) => {
+const TradingPage: React.FC<TradingPageProps> = ({ activeDeals, onCreateDeal, balance, userLuck, onNavigationChange, currency = DEFAULT_CURRENCY, isDemoMode = false, initialPair, onInitialPairConsumed }) => {
   const [viewMode, setViewMode] = useState<'instruments' | 'deals' | 'positions'>('instruments');
   const [activeCategory, setActiveCategory] = useState('Все');
   const [activeFilter, setActiveFilter] = useState('Все');
@@ -245,11 +216,13 @@ const TradingPage: React.FC<TradingPageProps> = ({ activeDeals, onCreateDeal, ba
   const [takeProfit, setTakeProfit] = useState(''); // Take Profit в %
   const [selectedDeal, setSelectedDeal] = useState<ActiveDeal | null>(null); // Выбранная сделка для просмотра
   const [isCategoryPanelVisible, setIsCategoryPanelVisible] = useState(true);
-  const [lastScrollY, setLastScrollY] = useState(0);
+  const lastScrollYRef = useRef(0);
+  const scrollRafRef = useRef<number | null>(null);
+  const scrollPendingRef = useRef(false);
   const [chartType, setChartType] = useState<'1' | '2'>('1');
   const [dynamicPrices, setDynamicPrices] = useState<Record<string, { price: string; change: string; isPositive: boolean }>>({});
   const [chartModalHeight, setChartModalHeight] = useState<'medium' | 'large'>('medium'); // medium = 70%, large = 80%
-  const [orderFormHeight, setOrderFormHeight] = useState<'small' | 'full'>('small'); // small = как график, full = почти весь экран
+  const [orderFormHeight, setOrderFormHeight] = useState<'small' | 'full'>('full'); // окно настроек торговли сразу в большом режиме
   const [touchStartY, setTouchStartY] = useState<number | null>(null);
   const [touchCurrentY, setTouchCurrentY] = useState<number | null>(null);
   const [isOrderFormAnimating, setIsOrderFormAnimating] = useState(false);
@@ -260,12 +233,35 @@ const TradingPage: React.FC<TradingPageProps> = ({ activeDeals, onCreateDeal, ba
     return () => clearInterval(timer);
   }, []);
 
+  // Открытие пары по коду из URL (?tab=trading&pair=TON или &code=BTC)
+  useEffect(() => {
+    if (!initialPair) return;
+    const symbol = initialPair.trim().toUpperCase();
+    const pair = PAIRS.find(p => p.symbol === symbol);
+    if (pair) {
+      setSelectedPair(pair);
+      onNavigationChange?.(true);
+    }
+    onInitialPairConsumed?.();
+  }, [initialPair]);
+
   // Гарантируем, что форма заказа скрыта при выборе новой пары
   useEffect(() => {
     if (selectedPair) {
       setShowOrderForm(false);
     }
   }, [selectedPair]);
+
+  // Обновляем URL при выборе пары — можно заходить по ссылке /?tab=trading&pair=TON
+  useEffect(() => {
+    if (selectedPair && typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      params.set('tab', 'trading');
+      params.set('pair', selectedPair.symbol);
+      const url = `${window.location.pathname}?${params.toString()}`;
+      window.history.replaceState(null, '', url);
+    }
+  }, [selectedPair?.symbol]);
 
   useEffect(() => {
     if (activeDeals.length === 0) return;
@@ -283,7 +279,6 @@ const TradingPage: React.FC<TradingPageProps> = ({ activeDeals, onCreateDeal, ba
   }, [activeDeals, currentTime, userLuck]);
 
   useEffect(() => {
-    // Оптимизировано: обновление цен реже и только когда нужно
     const updateDisplayPrices = () => {
       const newPrices: Record<string, { price: string; change: string; isPositive: boolean }> = {};
       PAIRS.forEach(pair => {
@@ -301,17 +296,12 @@ const TradingPage: React.FC<TradingPageProps> = ({ activeDeals, onCreateDeal, ba
       });
       setDynamicPrices(newPrices);
     };
-    
-    // Увеличено минимальное время обновления до 3-5 секунд
     const updatePrices = () => {
       updateDisplayPrices();
-      const nextUpdate = 3000 + Math.random() * 2000;
-      setTimeout(updatePrices, nextUpdate);
+      setTimeout(updatePrices, 5000 + Math.random() * 3000);
     };
-    
     updateDisplayPrices();
-    const timeoutId = setTimeout(updatePrices, 3000);
-    
+    const timeoutId = setTimeout(updatePrices, 5000);
     return () => clearTimeout(timeoutId);
   }, []);
 
@@ -332,16 +322,25 @@ const TradingPage: React.FC<TradingPageProps> = ({ activeDeals, onCreateDeal, ba
 
   const handleScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
     const currentScrollY = e.currentTarget.scrollTop;
-    if (currentScrollY > lastScrollY && currentScrollY > 50) setIsCategoryPanelVisible(false);
-    else if (currentScrollY < lastScrollY) setIsCategoryPanelVisible(true);
-    setLastScrollY(currentScrollY);
-  }, [lastScrollY]);
+    const last = lastScrollYRef.current;
+    lastScrollYRef.current = currentScrollY;
+    if (scrollPendingRef.current) return;
+    scrollPendingRef.current = true;
+    const rafId = requestAnimationFrame(() => {
+      scrollPendingRef.current = false;
+      scrollRafRef.current = null;
+      if (currentScrollY > last && currentScrollY > 50) setIsCategoryPanelVisible(false);
+      else if (currentScrollY < last) setIsCategoryPanelVisible(true);
+    });
+    scrollRafRef.current = rafId;
+  }, []);
+
+  useEffect(() => () => { if (scrollRafRef.current != null) cancelAnimationFrame(scrollRafRef.current); }, []);
 
   const filteredPairs = useMemo(() => {
     return PAIRS.filter(pair => {
       if (activeCategory === 'Криптовалюта' && pair.category !== 'crypto') return false;
       if (activeCategory === 'Акции' && pair.category !== 'stocks') return false;
-      if (activeCategory === 'НФТ' && pair.category !== 'nft') return false;
       if (activeCategory === 'Сырье' && pair.category !== 'commodities') return false;
       if (searchQuery) {
         const q = searchQuery.toLowerCase();
@@ -372,7 +371,7 @@ const TradingPage: React.FC<TradingPageProps> = ({ activeDeals, onCreateDeal, ba
 
   const handleShowOrderForm = useCallback((side: 'Long' | 'Short') => {
     setOrderSide(side);
-    setOrderFormHeight('small'); // Начинаем с маленького размера
+    setOrderFormHeight('full');
     setIsOrderFormAnimating(true);
     setShowOrderForm(true);
     // Сбрасываем флаг анимации после завершения
@@ -419,7 +418,7 @@ const TradingPage: React.FC<TradingPageProps> = ({ activeDeals, onCreateDeal, ba
     if (betAmount <= 0) { setErrorMsg("Введите сумму"); return; }
     if (betAmount > balance) { setErrorMsg("Недостаточно средств"); return; }
     const cleanPrice = parseFloat(selectedPair.price.replace(/,/g, ''));
-    const pairSuffix = selectedPair.category === 'crypto' ? '/USDT' : selectedPair.category === 'stocks' ? '' : selectedPair.category === 'nft' ? '/ETH' : selectedPair.category === 'commodities' ? '/USD' : '/USDT';
+    const pairSuffix = selectedPair.category === 'crypto' ? '/USDT' : selectedPair.category === 'stocks' ? '' : selectedPair.category === 'commodities' ? '/USD' : '/USDT';
     
     const newDeal: ActiveDeal = {
       id: Date.now().toString(),
@@ -489,8 +488,6 @@ const TradingPage: React.FC<TradingPageProps> = ({ activeDeals, onCreateDeal, ba
     if (!selectedPair) return null;
     
     let tvSymbol = '';
-    let showNftImage = false;
-    let nftImageUrl = '';
     
     if (selectedPair.category === 'crypto') {
       tvSymbol = selectedPair.symbol === 'TON' ? 'BYBIT:TONUSDT' : `BINANCE:${selectedPair.symbol}USDT`;
@@ -498,13 +495,6 @@ const TradingPage: React.FC<TradingPageProps> = ({ activeDeals, onCreateDeal, ba
       const nyseStocks = ['JPM', 'BAC', 'V', 'MA', 'KO', 'DIS', 'NKE'];
       const exchange = nyseStocks.includes(selectedPair.symbol) ? 'NYSE' : 'NASDAQ';
       tvSymbol = `${exchange}:${selectedPair.symbol}`;
-    } else if (selectedPair.category === 'nft') {
-      showNftImage = true;
-       switch (selectedPair.symbol) {
-        case 'BAYC': nftImageUrl = 'https://image.binance.vision/editor-uploads-original/9c15d9647b9643dfbc5e522299d13593.png'; break;
-        case 'PUNK': nftImageUrl = 'https://rallyrd.com/wp-content/uploads/2022/03/Punk-02.jpg'; break;
-        default: nftImageUrl = 'https://nftevening.com/wp-content/uploads/2021/08/Tyler-Hobbs.jpeg';
-      }
     } else if (selectedPair.category === 'commodities') {
       if (selectedPair.symbol === 'GOLD') tvSymbol = 'COMEX:GC1!';
       else if (selectedPair.symbol === 'OIL') tvSymbol = 'NYMEX:CL1!';
@@ -514,22 +504,19 @@ const TradingPage: React.FC<TradingPageProps> = ({ activeDeals, onCreateDeal, ba
     }
     
     const chartUrl = `https://s.tradingview.com/widgetembed/?symbol=${tvSymbol}&interval=5&hidesidetoolbar=1&hidetoptoolbar=1&symboledit=0&saveimage=0&theme=dark&style=${chartType}&timezone=Etc%2FUTC&withdateranges=0&hide_legend=1&hide_volume=1&backgroundColor=rgba(0,0,0,0)&gridLineColor=rgba(40,40,40,0.3)`;
-    const heightClass = chartModalHeight === 'large' ? 'h-[80vh]' : 'h-[70vh]';
+    const heightClass = chartModalHeight === 'large' ? 'h-[85dvh]' : 'h-[72dvh]';
 
     return (
       <div className="fixed inset-0 z-[100] flex items-end justify-center pointer-events-none">
-        {/* Backdrop */}
         <div 
-          className="absolute inset-0 bg-black/60 backdrop-blur-sm pointer-events-auto transition-opacity"
+          className="absolute inset-0 bg-black/50 pointer-events-auto transition-opacity"
           onClick={() => {
             setSelectedPair(null);
             setShowOrderForm(false);
             onNavigationChange?.(false);
           }}
         />
-        
-        {/* Modal Sheet */}
-        <div className={`${heightClass} w-full max-w-[420px] bg-[#111113] rounded-t-[32px] border-t border-white/10 relative z-10 pointer-events-auto flex flex-col shadow-2xl animate-[slideUp_0.3s_ease-out]`}>
+        <div className={`${heightClass} w-full max-w-[420px] bg-[#111113] rounded-t-2xl border-t border-white/8 relative z-10 pointer-events-auto flex flex-col animate-[slideUp_0.25s_ease-out] pb-[env(safe-area-inset-bottom)]`}>
           {/* Drag Handle & Header */}
           <div className="flex-shrink-0 px-4 pt-3 pb-2">
             <div className="w-12 h-1.5 bg-white/20 rounded-full mx-auto mb-3 cursor-ns-resize" />
@@ -568,18 +555,12 @@ const TradingPage: React.FC<TradingPageProps> = ({ activeDeals, onCreateDeal, ba
 
           {/* Chart Area */}
           <div className={`flex-1 relative min-h-0 ${showOrderForm ? 'opacity-30' : 'opacity-100'} transition-opacity duration-300`}>
-            {showNftImage ? (
-              <div className="w-full h-full flex items-center justify-center p-4">
-                <img src={nftImageUrl} className="w-full h-full object-contain opacity-90 rounded-xl" alt="" />
-              </div>
-            ) : (
-              <iframe 
-                src={chartUrl} 
-                className="w-full h-full border-none" 
-                style={{ background: 'transparent' }} 
-                title="Chart" 
-              />
-            )}
+            <iframe 
+              src={chartUrl} 
+              className="w-full h-full border-none" 
+              style={{ background: 'transparent' }} 
+              title="Chart" 
+            />
           </div>
 
           {/* Action Buttons */}
@@ -588,13 +569,13 @@ const TradingPage: React.FC<TradingPageProps> = ({ activeDeals, onCreateDeal, ba
               <div className="flex gap-3">
                 <button 
                   onClick={() => handleShowOrderForm('Long')} 
-                  className="flex-1 h-12 bg-[#00C896] text-black text-base font-bold rounded-xl flex items-center justify-center gap-2 active:scale-95 transition-all shadow-[0_0_20px_rgba(0,200,150,0.3)]"
+                  className="flex-1 h-12 bg-[#00C896] text-black text-base font-semibold rounded-xl flex items-center justify-center gap-2 active:scale-[0.98] transition-all"
                 >
-                  <TrendingUp size={20} strokeWidth={3} /> Long
+                  <TrendingUp size={20} strokeWidth={2.5} /> Long
                 </button>
                 <button 
                   onClick={() => handleShowOrderForm('Short')} 
-                  className="flex-1 h-12 bg-[#FF3B30] text-white text-base font-bold rounded-xl flex items-center justify-center gap-2 active:scale-95 transition-all shadow-[0_0_20px_rgba(255,59,48,0.3)]"
+                  className="flex-1 h-12 bg-[#FF3B30] text-white text-base font-semibold rounded-xl flex items-center justify-center gap-2 active:scale-[0.98] transition-all"
                 >
                   <TrendingDown size={20} strokeWidth={3} /> Short
                 </button>
@@ -615,7 +596,7 @@ const TradingPage: React.FC<TradingPageProps> = ({ activeDeals, onCreateDeal, ba
       <>
         {/* Backdrop */}
         <div 
-          className="fixed inset-0 z-[110] bg-black/60 backdrop-blur-sm transition-opacity" 
+          className="fixed inset-0 z-[110] bg-black/55 transition-opacity" 
           onClick={() => {
             if (orderFormHeight === 'small') {
               setShowOrderForm(false);
@@ -625,25 +606,23 @@ const TradingPage: React.FC<TradingPageProps> = ({ activeDeals, onCreateDeal, ba
           }} 
         />
         
-        {/* Order Form Bottom Sheet */}
         <div 
-          className={`fixed bottom-0 left-1/2 z-[120] w-full max-w-[420px] bg-[#1c1c1e] flex flex-col rounded-t-[32px] border-t border-white/10 shadow-2xl transition-all duration-300 ease-out ${
-            isOrderFormAnimating ? 'animate-[slideUpFromBottom_0.3s_ease-out]' : ''
-          } ${
-            orderFormHeight === 'full' ? 'h-[95vh]' : 'h-[70vh]'
-          }`}
+          className={`fixed bottom-0 left-1/2 z-[120] w-full max-w-[420px] bg-[#1c1c1e] flex flex-col rounded-t-2xl border-t border-white/8 transition-all duration-200 ease-out ${
+            isOrderFormAnimating ? 'animate-[slideUpFromBottom_0.25s_ease-out]' : ''
+          } ${orderFormHeight === 'full' ? 'h-[90dvh]' : 'h-[65dvh]'}`}
+          style={{ 
+            transform: isOrderFormAnimating 
+              ? undefined 
+              : touchCurrentY != null && touchStartY != null 
+                ? `translate(-50%, ${Math.min(0, touchStartY - touchCurrentY)}px)` 
+                : 'translate(-50%, 0)',
+            paddingBottom: 'env(safe-area-inset-bottom)',
+            willChange: touchCurrentY != null && touchStartY != null ? 'transform' : 'auto'
+          }}
           onTouchStart={handleTouchStart}
           onTouchMove={handleTouchMove}
           onTouchEnd={handleTouchEnd}
           onClick={(e) => e.stopPropagation()}
-          style={{ 
-            transform: isOrderFormAnimating 
-              ? undefined 
-              : touchCurrentY && touchStartY 
-                ? `translate(-50%, ${Math.min(0, touchStartY - touchCurrentY)}px)` 
-                : 'translate(-50%, 0)',
-            willChange: touchCurrentY && touchStartY ? 'transform' : isOrderFormAnimating ? 'transform' : 'height'
-          }}
         >
           {/* Drag Handle */}
           <div className="flex-shrink-0 px-4 pt-3 pb-2">
@@ -677,9 +656,9 @@ const TradingPage: React.FC<TradingPageProps> = ({ activeDeals, onCreateDeal, ba
           <div className="flex-1 overflow-y-auto px-4 pb-4 pt-2" style={{ WebkitOverflowScrolling: 'touch' }}>
             {/* Demo Mode Banner */}
             {isDemoMode && (
-              <div className="bg-[#0098EA]/10 border border-[#0098EA]/30 rounded-xl p-3 mb-4 flex items-center gap-2">
-                <div className="w-2 h-2 rounded-full bg-[#0098EA] animate-pulse" />
-                <span className="text-sm text-[#0098EA] font-medium">ДЕМО РЕЖИМ</span>
+              <div className="bg-[#0098EA]/10 border border-[#0098EA]/15 rounded-xl p-3 mb-4 flex items-center gap-2">
+                <div className="w-2 h-2 rounded-full bg-[#0098EA]" />
+                <span className="text-sm text-[#0098EA] font-medium">Демо режим</span>
                 <span className="text-xs text-[#0098EA]/70 ml-auto">Виртуальные средства</span>
               </div>
             )}
@@ -696,14 +675,14 @@ const TradingPage: React.FC<TradingPageProps> = ({ activeDeals, onCreateDeal, ba
                 </div>
               </div>
               <div className="text-right">
-                <div className="text-xs text-gray-400 mb-1">Плечо</div>
-                <div className="text-yellow-400 font-bold text-lg flex items-center gap-1 justify-end"><Zap size={16} fill="currentColor"/> {leverage}x</div>
+                <div className="text-xs text-gray-500 mb-1">Плечо</div>
+                <div className="text-gray-300 font-medium text-base flex items-center gap-1 justify-end"><Zap size={14}/> ×{leverage}</div>
               </div>
             </div>
 
             {/* Amount Input */}
             <div className="mb-4">
-              <div className="text-xs text-gray-400 uppercase mb-2 tracking-wider">Сумма сделки</div>
+              <div className="text-xs text-gray-500 mb-2">Сумма сделки</div>
               <div className="bg-[#111113] rounded-xl p-3 flex items-center border border-white/5">
                 <button onClick={() => setAmount(p => Math.max(10, Number(p)-50).toString())} className="w-12 h-12 bg-[#1c1c1e] hover:bg-[#252527] rounded-lg flex items-center justify-center text-white transition-colors border border-white/5">
                   <Minus size={20} />
@@ -740,9 +719,9 @@ const TradingPage: React.FC<TradingPageProps> = ({ activeDeals, onCreateDeal, ba
 
             {/* Leverage Slider */}
             <div className="mb-4">
-              <div className="flex justify-between text-xs font-semibold text-gray-400 mb-2 uppercase tracking-wider">
+              <div className="flex justify-between text-xs text-gray-500 mb-2">
                 <span>Кредитное плечо</span>
-                <span className="text-yellow-400 font-bold">x{leverage}</span>
+                <span className="text-gray-400 font-medium">×{leverage}</span>
               </div>
               <div className="bg-[#111113] rounded-xl p-3 border border-white/5">
                 <input
@@ -751,7 +730,7 @@ const TradingPage: React.FC<TradingPageProps> = ({ activeDeals, onCreateDeal, ba
                   max="20"
                   value={leverage}
                   onChange={e => setLeverage(Number(e.target.value))}
-                  className="w-full h-2 bg-[#252527] rounded-lg appearance-none cursor-pointer accent-yellow-400"
+                  className="w-full h-2 bg-[#252527] rounded-lg appearance-none cursor-pointer accent-white/30"
                   style={{
                     background: `linear-gradient(to right, #facc15 0%, #facc15 ${(leverage - 1) / 19 * 100}%, #252527 ${(leverage - 1) / 19 * 100}%, #252527 100%)`
                   }}
@@ -764,15 +743,14 @@ const TradingPage: React.FC<TradingPageProps> = ({ activeDeals, onCreateDeal, ba
                   <span>x20</span>
                 </div>
               </div>
-              <p className="text-[10px] text-gray-500 mt-1">
-                Потенциальная прибыль: <span className="text-[#00C896]">+{(Number(amount) * leverage * 0.1).toFixed(0)}$</span> | 
-                Риск: <span className="text-[#FF3B30]">-{Number(amount).toFixed(0)}$</span>
+              <p className="text-[11px] text-gray-500 mt-2">
+                Прибыль: <span className="text-[#00C896]/90">+{(Number(amount) * leverage * 0.1).toFixed(0)}$</span> · Риск: <span className="text-[#FF3B30]/90">−{Number(amount).toFixed(0)}$</span>
               </p>
             </div>
 
             {/* Stop Loss & Take Profit */}
             <div className="mb-4">
-              <div className="text-xs text-gray-400 uppercase mb-2 tracking-wider">Риск-менеджмент</div>
+              <div className="text-xs text-gray-500 mb-2">Stop Loss / Take Profit</div>
               <div className="grid grid-cols-2 gap-2">
                 <div className="bg-[#111113] rounded-xl p-3 border border-white/5">
                   <div className="flex items-center gap-2 mb-2">
@@ -821,30 +799,28 @@ const TradingPage: React.FC<TradingPageProps> = ({ activeDeals, onCreateDeal, ba
 
             {/* Time Selector */}
             <div className="mb-6">
-              <div className="flex justify-between text-xs font-semibold text-gray-400 mb-3 uppercase tracking-wider">
-                <span>Время сделки</span>
-                <span className="text-[#0098EA] font-bold">{TIME_OPTIONS[timeIndex].label}</span>
-              </div>
-              <div className="bg-[#111113] p-1.5 rounded-xl flex gap-1.5 border border-white/5">
+              <div className="text-xs text-gray-500 mb-2">Время сделки</div>
+              <div className="bg-[#111113] p-1 rounded-xl flex gap-1 border border-white/5">
                 {TIME_OPTIONS.map((t, i) => (
                   <button
                     key={i}
                     onClick={() => setTimeIndex(i)}
-                    className={`flex-1 py-3 rounded-lg text-sm font-bold transition-all duration-200 ${
+                    className={`flex-1 py-2.5 rounded-lg text-sm font-medium transition-colors ${
                       i === timeIndex 
-                      ? 'bg-[#252527] text-white shadow-sm ring-1 ring-white/10 border border-white/5' 
+                      ? 'bg-white/10 text-white' 
                       : 'text-gray-500 hover:text-gray-300'
                     }`}
                   >
-                    {t.label}
+                    {t.short}
                   </button>
                 ))}
               </div>
+              <div className="text-center text-xs text-gray-500 mt-1.5">{TIME_OPTIONS[timeIndex].label}</div>
             </div>
 
             {/* Error Message */}
             {errorMsg && (
-              <div className="mb-3 bg-red-500/10 border border-red-500/20 text-red-500 text-xs p-2 rounded-lg flex items-center gap-2 animate-pulse">
+              <div className="mb-3 bg-red-500/10 border border-red-500/15 text-red-400 text-xs p-2.5 rounded-lg flex items-center gap-2">
                 <AlertTriangle size={14} /> {errorMsg}
               </div>
             )}
@@ -852,10 +828,10 @@ const TradingPage: React.FC<TradingPageProps> = ({ activeDeals, onCreateDeal, ba
             {/* Main Action Button */}
             <button 
               onClick={handleOpenDeal} 
-              className={`w-full h-14 rounded-xl text-lg font-bold shadow-lg active:scale-[0.98] transition-all flex items-center justify-center gap-2 mb-4 ${
+              className={`w-full h-14 rounded-xl text-base font-semibold active:scale-[0.98] transition-all flex items-center justify-center gap-2 mb-4 ${
                 orderSide === 'Long' 
-                ? 'bg-[#00C896] text-black shadow-[0_4px_20px_rgba(0,200,150,0.2)]' 
-                : 'bg-[#FF3B30] text-white shadow-[0_4px_20px_rgba(255,59,48,0.2)]'
+                ? 'bg-[#00C896] text-black' 
+                : 'bg-[#FF3B30] text-white'
               }`}
             >
               Открыть сделку
@@ -871,13 +847,13 @@ const TradingPage: React.FC<TradingPageProps> = ({ activeDeals, onCreateDeal, ba
     <>
       {renderChartModal()}
       {renderOrderFormModal()}
-      <div className="h-full flex flex-col bg-black text-white overflow-hidden">
+      <div className="h-full min-h-0 flex flex-col bg-black text-white overflow-hidden">
       {/* Top Navigation (Segmented Control) */}
       <div className="shrink-0 pt-4 px-4 pb-2 z-10 bg-black">
          <div className="bg-[#1c1c1e] p-1 rounded-2xl flex relative h-12 border border-white/5">
              {/* Sliding Background */}
              <div 
-                className={`absolute top-1 bottom-1 w-[calc(33.333%-4px)] bg-[#3a3a3c] rounded-[14px] shadow-lg transition-all duration-300 ease-out border border-white/5 ${
+                className={`absolute top-1 bottom-1 w-[calc(33.333%-4px)] bg-[#2a2a2c] rounded-[14px] transition-all duration-300 ease-out ${
                     viewMode === 'instruments' ? 'left-1' : viewMode === 'deals' ? 'left-[calc(33.333%)]' : 'left-[calc(66.666%)]'
                 }`} 
              />
@@ -894,7 +870,7 @@ const TradingPage: React.FC<TradingPageProps> = ({ activeDeals, onCreateDeal, ba
              >
                 Сделки
                 {activeDeals.length > 0 && (
-                    <span className="w-1.5 h-1.5 rounded-full bg-[#00C896] shadow-[0_0_8px_#00C896]" />
+                    <span className="w-1.5 h-1.5 rounded-full bg-[#00C896]" />
                 )}
              </button>
              <button 
@@ -902,44 +878,44 @@ const TradingPage: React.FC<TradingPageProps> = ({ activeDeals, onCreateDeal, ba
                 className={`flex-1 relative z-10 font-semibold text-sm transition-colors duration-300 flex items-center justify-center gap-1.5 ${viewMode === 'positions' ? 'text-white' : 'text-gray-400'}`}
              >
                 Позиции
-                <span className="w-1.5 h-1.5 rounded-full bg-[#0098EA] shadow-[0_0_8px_#0098EA] animate-pulse" />
+                <span className="w-1.5 h-1.5 rounded-full bg-[#0098EA]" />
              </button>
          </div>
       </div>
 
       {/* Content Area */}
-      <div className="flex-1 overflow-hidden flex flex-col relative">
+      <div className="flex-1 min-h-0 overflow-hidden flex flex-col relative">
         {viewMode === 'instruments' && (
           <>
-            {/* Search & Filters */}
-            <div className={`shrink-0 px-4 bg-black z-20 space-y-3 transition-all duration-500 ease-out overflow-hidden ${
+            {/* Search & Filters — компактно */}
+            <div className={`shrink-0 px-4 bg-black z-20 space-y-2 transition-all duration-300 ease-out overflow-hidden ${
               isCategoryPanelVisible 
-                ? 'py-3 max-h-32 opacity-100 translate-y-0' 
-                : 'py-0 max-h-0 opacity-0 -translate-y-4'
+                ? 'py-2 max-h-24 opacity-100 translate-y-0' 
+                : 'py-0 max-h-0 opacity-0 -translate-y-2'
             }`}>
                {/* Search Bar */}
-               <div className="bg-[#1c1c1e] h-10 rounded-xl flex items-center px-3 gap-2 border border-white/5 transition-all focus-within:border-white/20">
-                   <Search size={18} className="text-gray-500" />
+               <div className="bg-[#1c1c1e] h-8 rounded-lg flex items-center pl-2.5 pr-2 gap-1.5 border border-white/5 transition-colors focus-within:border-white/10">
+                   <Search size={14} className="text-gray-500 shrink-0" strokeWidth={2} />
                    <input 
                       type="text" 
                       placeholder="Поиск актива..." 
-                      className="bg-transparent w-full text-white placeholder:text-gray-600 outline-none text-sm"
+                      className="bg-transparent w-full text-white placeholder:text-gray-600 outline-none text-xs min-w-0"
                       value={searchQuery}
                       onChange={e => setSearchQuery(e.target.value)}
                    />
-                   {searchQuery && <button onClick={() => setSearchQuery('')}><X size={16} className="text-gray-500" /></button>}
+                   {searchQuery && <button onClick={() => setSearchQuery('')} className="shrink-0 p-0.5"><X size={14} className="text-gray-500" strokeWidth={2} /></button>}
                </div>
 
                {/* Horizontal Filters */}
-               <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1">
-                  {['Все', 'Криптовалюта', 'Акции', 'НФТ', 'Сырье'].map(cat => (
+               <div className="flex gap-1.5 overflow-x-auto no-scrollbar">
+                  {['Все', 'Криптовалюта', 'Акции', 'Сырье'].map(cat => (
                       <button
                           key={cat}
                           onClick={() => setActiveCategory(cat)}
-                          className={`px-4 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap border transition-all ${
+                          className={`px-3 py-1 rounded-full text-[11px] font-medium whitespace-nowrap transition-colors ${
                               activeCategory === cat 
-                              ? 'bg-white text-black border-white' 
-                              : 'bg-transparent text-gray-400 border-white/5 hover:border-white/10'
+                              ? 'bg-white/12 text-white' 
+                              : 'text-gray-500 hover:text-gray-400'
                           }`}
                       >
                           {cat}
@@ -949,7 +925,7 @@ const TradingPage: React.FC<TradingPageProps> = ({ activeDeals, onCreateDeal, ba
             </div>
 
             {/* List */}
-            <div className="flex-1 overflow-y-auto px-4 pb-24" onScroll={handleScroll} style={{ WebkitOverflowScrolling: 'touch' }}>
+            <div className="flex-1 min-h-0 overflow-y-auto px-4 pb-24" onScroll={handleScroll} style={{ WebkitOverflowScrolling: 'touch' }}>
               {filteredPairs.map(pair => {
                  const displayPrice = dynamicPrices[pair.id]?.price || pair.price;
                  const displayChange = dynamicPrices[pair.id]?.change || pair.change;
@@ -967,7 +943,8 @@ const TradingPage: React.FC<TradingPageProps> = ({ activeDeals, onCreateDeal, ba
                     <div 
                         key={pair.id} 
                         onClick={() => handleSelectPair(pair)}
-                        className="group flex items-center justify-between py-3 border-b border-white/5 active:scale-[0.98] transition-all cursor-pointer"
+                        className="group flex items-center justify-between py-2.5 border-b border-white/5 active:scale-[0.98] transition-transform cursor-pointer"
+                        style={{ contentVisibility: 'auto' }}
                     >
                        <div className="flex items-center gap-3.5">
                            <CryptoIcon symbol={pair.symbol} size={48} />
@@ -982,7 +959,7 @@ const TradingPage: React.FC<TradingPageProps> = ({ activeDeals, onCreateDeal, ba
                        <div className="flex items-center gap-3">
                            <div className="text-right">
                                <div className="font-mono font-medium text-base mb-0.5 tracking-tight">{formattedPrice}</div>
-                               <div className={`text-xs font-bold px-1.5 py-0.5 rounded-md inline-flex items-center gap-0.5 ${isPos ? 'bg-[#00C896]/10 text-[#00C896]' : 'bg-[#FF3B30]/10 text-[#FF3B30]'}`}>
+                               <div className={`text-xs font-medium px-1.5 py-0.5 rounded inline-flex items-center gap-0.5 ${isPos ? 'bg-[#00C896]/8 text-[#00C896]/95' : 'bg-[#FF3B30]/8 text-[#FF3B30]/95'}`}>
                                    {isPos ? '+' : ''}{displayChange}
                                </div>
                                </div>
@@ -997,7 +974,7 @@ const TradingPage: React.FC<TradingPageProps> = ({ activeDeals, onCreateDeal, ba
 
         {/* Deals List */}
         {viewMode === 'deals' && (
-           <div className="flex-1 overflow-y-auto px-4 pt-2 pb-24" style={{ WebkitOverflowScrolling: 'touch' }}>
+           <div className="flex-1 min-h-0 overflow-y-auto px-4 pt-2 pb-24" style={{ WebkitOverflowScrolling: 'touch' }}>
               {activeDeals.length === 0 ? (
                   <div className="flex flex-col items-center justify-center h-64 text-gray-500">
                       <div className="w-16 h-16 rounded-2xl bg-[#1c1c1e] flex items-center justify-center mb-4 border border-white/5">
@@ -1021,10 +998,8 @@ const TradingPage: React.FC<TradingPageProps> = ({ activeDeals, onCreateDeal, ba
                           <div 
                             key={deal.id} 
                             onClick={() => setSelectedDeal(deal)}
-                            className={`rounded-2xl p-4 mb-3 border relative overflow-hidden cursor-pointer active:scale-[0.98] transition-all ${
-                              isWinning 
-                                ? 'bg-gradient-to-r from-[#00C896]/5 to-transparent border-[#00C896]/20' 
-                                : 'bg-gradient-to-r from-[#FF3B30]/5 to-transparent border-[#FF3B30]/20'
+                            className={`rounded-2xl p-4 mb-3 bg-[#111113] border border-white/6 relative overflow-hidden cursor-pointer active:scale-[0.98] transition-all ${
+                              isWinning ? 'border-l-[#00C896]/30' : 'border-l-[#FF3B30]/30'
                             }`}
                           >
                               {/* Progress Ring */}
@@ -1079,7 +1054,7 @@ const TradingPage: React.FC<TradingPageProps> = ({ activeDeals, onCreateDeal, ba
 
         {/* Positions - Minimalist Design */}
         {viewMode === 'positions' && (
-           <div className="flex-1 overflow-y-auto px-4 pt-2 pb-24" style={{ WebkitOverflowScrolling: 'touch' }}>
+           <div className="flex-1 min-h-0 overflow-y-auto px-4 pt-2 pb-24" style={{ WebkitOverflowScrolling: 'touch' }}>
               {/* Compact Stats */}
               <div className="flex items-center justify-between mb-4 px-1">
                 <div className="flex items-center gap-3">
@@ -1093,7 +1068,7 @@ const TradingPage: React.FC<TradingPageProps> = ({ activeDeals, onCreateDeal, ba
                   </div>
                 </div>
                 <div className="flex items-center gap-1.5">
-                  <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
+                  <div className="w-2 h-2 bg-red-500 rounded-full" />
                   <span className="text-[10px] text-gray-500">LIVE</span>
                 </div>
               </div>
@@ -1231,7 +1206,6 @@ const TradingPage: React.FC<TradingPageProps> = ({ activeDeals, onCreateDeal, ba
                             cy={points[points.length-1]?.y || 50}
                             r="2"
                             fill={isWinning ? '#00C896' : '#FF3B30'}
-                            className="animate-pulse"
                           />
                         )}
                       </svg>

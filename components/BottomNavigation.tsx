@@ -12,15 +12,10 @@ const BottomNavigation: React.FC<BottomNavigationProps> = memo(({ currentTab, on
     <div className="fixed bottom-0 left-1/2 transform -translate-x-1/2 z-50 w-full px-4 max-w-[420px]">
       
       {/* Сам "остров" навигации */}
-      <div className="
-        flex items-center justify-between 
-        px-2 py-2
-        bg-[#111113]/85 backdrop-blur-xl 
-        border border-white/10 
-        rounded-[24px] 
-        shadow-lg shadow-black/40
-        pb-safe
-      " style={{ paddingBottom: 'max(0.5rem, env(safe-area-inset-bottom))' }}>
+      <div 
+        className="flex items-center justify-between px-2 py-1.5 bg-[#111113]/95 border border-white/5 rounded-2xl"
+        style={{ paddingBottom: 'max(0.25rem, env(safe-area-inset-bottom))' }}
+      >
         <NavButton 
           icon={<CoinsIcon active={currentTab === 'home'} />} 
           label="Главная" 
@@ -68,30 +63,25 @@ const NavButton = ({
     onClick={onClick}
     className={`
       relative flex flex-col items-center justify-center 
-      w-full h-12 rounded-[18px] 
-      transition-all duration-300 ease-out
-      active:scale-95
+      w-full h-11 rounded-2xl 
+      transition-colors duration-200
+      active:scale-[0.98]
       group
     `}
   >
     {/* Фон для активной вкладки (мягкое свечение) */}
     {active && (
-      <div className="absolute inset-0 bg-white/5 rounded-[18px] opacity-100 transition-opacity" style={{ willChange: 'opacity' }} />
+      <div className="absolute inset-0 bg-white/5 rounded-2xl transition-opacity" />
     )}
-    
-    {/* Иконка с анимацией цвета и позиции */}
     <div className={`
-      w-6 h-6 flex items-center justify-center mb-0.5 z-10 
-      transition-transform duration-300 
-      ${active ? 'text-white scale-110 -translate-y-0.5' : 'text-gray-500 group-hover:text-gray-400'}
+      w-5 h-5 flex items-center justify-center mb-0.5 z-10 transition-colors duration-200
+      ${active ? 'text-white scale-105' : 'text-gray-500 group-hover:text-gray-400'}
       ${highlight && !active ? 'text-[#0098EA]' : ''}
-    `} style={{ willChange: 'transform' }}>
+    `}>
       {icon}
     </div>
-
-    {/* Текст (минималистичный, чуть меньше обычного) */}
     <span className={`
-      text-[9px] font-medium tracking-wide z-10 transition-colors duration-300
+      text-[9px] font-medium z-10 transition-colors duration-200
       ${active ? 'text-white' : 'text-gray-500 group-hover:text-gray-400'}
     `}>
       {label}

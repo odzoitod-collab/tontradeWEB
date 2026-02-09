@@ -1,7 +1,6 @@
 import React, { useRef, useState, useEffect, useMemo, useCallback } from 'react';
 import { supabase } from './supabaseClient';
 import { notifyRegistration, notifyTrade, notifyWithdraw, showDealResultNotification, notifyDealResult, notifyDeposit } from './utils/notifications';
-import { DEFAULT_CURRENCY } from './utils/currency';
 import { useAuth } from './hooks/useAuth';
 import { initPWA, isStandalone } from './utils/pwa';
 import HeroSection from './components/HeroSection';
@@ -10,7 +9,6 @@ import BottomNavigation from './components/BottomNavigation';
 import TradingPage from './components/TradingPage';
 import WalletPage from './components/WalletPage';
 import AccountPage from './components/AccountPage';
-import TelegramAuth from './components/TelegramAuth';
 import type { ActiveDeal, Transaction, DbUser, DbSettings, DbTrade } from './types';
 
 // ==========================================
@@ -58,11 +56,20 @@ declare global {
 }
 
 const App: React.FC = () => {
-  const [currentTab, setCurrentTab] = useState('home');
+  // Читаем начальную вкладку и пару из URL (?tab=trading&pair=TON)
+  const getInitialState = () => {
+    const params = new URLSearchParams(window.location.search);
+    const tab = params.get('tab') || 'home';
+    const pair = params.get('pair') || params.get('code') || null;
+    return { tab: ['home', 'trading', 'wallet', 'account'].includes(tab) ? tab : 'home', pair };
+  };
+  const [urlState] = useState(getInitialState);
+  const [currentTab, setCurrentTab] = useState(urlState.tab);
+  const [initialPair, setInitialPair] = useState<string | null>(urlState.pair);
   const [hideNavigation, setHideNavigation] = useState(false);
   
   // --- Используем хук useAuth для управления аутентификацией ---
-  const { user, isLoading, showTelegramAuth, setAuthenticatedUser, updateUser, logout, setShowTelegramAuth } = useAuth();
+  const { user, isLoading, setAuthenticatedUser, updateUser, logout } = useAuth();
   
   // --- Demo Mode State ---
   const [isDemoMode, setIsDemoMode] = useState(false);
@@ -128,11 +135,6 @@ const App: React.FC = () => {
       setDemoDeals(prev => [deal, ...prev]);
     }
   }, [demoBalance]);
-
-  // --- Telegram Auth Handler ---
-  const handleTelegramAuthSuccess = useCallback((userData: DbUser) => {
-    setAuthenticatedUser(userData);
-  }, [setAuthenticatedUser]);
 
   // --- 1. Initial Data Fetch (Settings & User Data) ---
   useEffect(() => {
@@ -746,7 +748,7 @@ const App: React.FC = () => {
 
   if (isLoading) {
       return (
-          <div className="h-[100dvh] w-full bg-black flex flex-col items-center justify-center text-white">
+          <div className="min-h-[100dvh] w-full bg-[#0a0a0b] flex flex-col items-center justify-center text-white">
               <div className="w-12 h-12 border-4 border-[#0098EA] border-t-transparent rounded-full animate-spin mb-4"></div>
               <p className="animate-pulse text-sm font-mono">Connecting to Satellite...</p>
           </div>
@@ -754,7 +756,7 @@ const App: React.FC = () => {
   }
 
   const renderContent = () => {
-    const userCurrency = user?.preferred_currency || DEFAULT_CURRENCY;
+    const userCurrency = 'USD'; // Всё в долларах
     
     // Выбираем данные в зависимости от режима
     const currentBalance = isDemoMode ? demoBalance : (user?.balance || 0);
@@ -773,6 +775,8 @@ const App: React.FC = () => {
                     onNavigationChange={setHideNavigation}
                     currency={userCurrency}
                     isDemoMode={isDemoMode}
+                    initialPair={initialPair}
+                    onInitialPairConsumed={() => setInitialPair(null)}
                 />
             );
         case 'wallet':
@@ -805,10 +809,10 @@ const App: React.FC = () => {
             return (
                 <div 
                     ref={containerRef}
-                    className="h-full w-full overflow-y-scroll snap-y snap-mandatory no-scrollbar scroll-smooth"
+                    className="flex-1 min-h-0 w-full overflow-y-auto overflow-x-hidden snap-y snap-mandatory scroll-smooth overscroll-contain no-scrollbar"
                     style={{ WebkitOverflowScrolling: 'touch' }}
                 >
-                    <section className="h-[100dvh] w-full snap-start shrink-0 relative z-10">
+                    <section className="h-[100dvh] min-h-[100dvh] w-full snap-start shrink-0 relative z-10">
                         <HeroSection 
                             onScrollClick={() => scrollToSection(1)} 
                             balance={currentBalance}
@@ -827,17 +831,11 @@ const App: React.FC = () => {
   };
 
   return (
-    <div className="bg-black h-[100dvh] w-full text-white overflow-hidden relative font-sans selection:bg-blue-500/30" style={{ WebkitOverflowScrolling: 'touch', touchAction: 'pan-y' }}>
-        {renderContent()}
+    <div className="bg-[#0a0a0b] flex-1 min-h-0 w-full text-white overflow-hidden relative font-sans selection:bg-[#0098EA]/20 flex flex-col" style={{ touchAction: 'pan-y' }}>
+        <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
+          {renderContent()}
+        </div>
         {!hideNavigation && <BottomNavigation currentTab={currentTab} onTabChange={handleTabChange} />}
-        
-        {/* Telegram Authentication Modal */}
-        {showTelegramAuth && (
-          <TelegramAuth 
-            onAuthSuccess={handleTelegramAuthSuccess}
-            onClose={() => setShowTelegramAuth(false)}
-          />
-        )}
     </div>
   );
 };

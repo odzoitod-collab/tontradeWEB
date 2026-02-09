@@ -110,7 +110,7 @@ const TasksSheet: React.FC<TasksSheetProps> = memo(({ onBackClick }) => {
             </div>
             
             <div className="absolute bottom-6 left-6 right-6">
-                <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-lg bg-blue-500/20 border border-blue-500/30 backdrop-blur-md mb-3">
+                <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-lg bg-[#0098EA]/20 border border-[#0098EA]/30 mb-3">
                    <div className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse"></div>
                    <span className="text-[10px] font-bold text-blue-100 uppercase tracking-wider">TON Ecosystem</span>
                 </div>

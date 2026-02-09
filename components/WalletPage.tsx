@@ -43,7 +43,7 @@ const TopTradersSection: React.FC = () => {
 
   return (
     <>
-      <div className="flex-1 overflow-y-auto px-4 pb-24" style={{ WebkitOverflowScrolling: 'touch' }}>
+      <div className="flex-1 min-h-0 overflow-y-auto px-4 pb-24" style={{ WebkitOverflowScrolling: 'touch' }}>
         {/* Header */}
         <div className="flex justify-between items-center mb-4">
           <h2 className="font-semibold text-gray-400 uppercase tracking-wider text-sm">Лидеры биржи</h2>
@@ -125,7 +125,7 @@ const TopTradersSection: React.FC = () => {
       {selectedTrader && (
         <>
           <div className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-sm" onClick={() => setSelectedTrader(null)} />
-          <div className="fixed inset-x-0 bottom-0 z-[110] bg-[#1c1c1e] rounded-t-3xl border-t border-white/10 p-5 pb-8 animate-[slideUp_0.3s_ease-out]">
+          <div className="fixed inset-x-0 bottom-0 z-[110] bg-[#1c1c1e] rounded-t-2xl border-t border-white/10 p-4 pb-6 animate-[slideUp_0.25s_ease-out]" style={{ paddingBottom: 'max(1.5rem, env(safe-area-inset-bottom))' }}>
             <div className="w-10 h-1 bg-white/10 rounded-full mx-auto mb-4" />
             
             {/* Header */}
@@ -208,7 +208,7 @@ interface WithdrawRequest {
 
 const WalletPage: React.FC<WalletPageProps> = ({ history, balance, onDeposit, onWithdraw, settings, onModalChange, userLuck = 'default', isKyc = false, userId, currency = DEFAULT_CURRENCY, isDemoMode = false }) => {
     const [activeTab, setActiveTab] = useState<'wallet' | 'history' | 'top'>('wallet');
-    const [activeModal, setActiveModal] = useState<'deposit' | 'withdraw' | 'converter' | 'processing' | 'withdraw-error' | null>(null);
+    const [activeModal, setActiveModal] = useState<'deposit' | 'withdraw' | 'converter' | 'processing' | 'withdraw-error' | 'withdraw-approved' | null>(null);
     const [depositMethod, setDepositMethod] = useState<DepositMethod | null>(null);
     const [copied, setCopied] = useState(false);
     const [depositAmount, setDepositAmount] = useState('');
@@ -218,10 +218,6 @@ const WalletPage: React.FC<WalletPageProps> = ({ history, balance, onDeposit, on
     const [selectedCountry, setSelectedCountry] = useState('Россия');
     const [uploadedScreenshot, setUploadedScreenshot] = useState<File | null>(null);
     const [screenshotPreview, setScreenshotPreview] = useState<string | null>(null);
-    const [showBalanceChart, setShowBalanceChart] = useState(false);
-    const [balanceHistory, setBalanceHistory] = useState<{date: string, balance: number}[]>([]);
-    const [chartPeriod, setChartPeriod] = useState<'week' | 'month'>('week');
-    
     // Состояние для минимального депозита (загружается из БД)
     const [minDeposit, setMinDeposit] = useState<number>(settings.min_deposit || 10);
     
@@ -316,76 +312,6 @@ const WalletPage: React.FC<WalletPageProps> = ({ history, balance, onDeposit, on
         
         loadReferralSettings();
     }, [userId]);
-
-    // Загружаем историю баланса из trades
-    React.useEffect(() => {
-        const loadBalanceHistory = async () => {
-            if (!userId) return;
-            
-            try {
-                // Получаем завершенные сделки за последний месяц
-                const thirtyDaysAgo = new Date();
-                thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-                
-                const { data: trades, error } = await supabase
-                    .from('trades')
-                    .select('created_at, final_pnl, status')
-                    .eq('user_id', userId)
-                    .eq('status', 'completed')
-                    .gte('created_at', thirtyDaysAgo.toISOString())
-                    .order('created_at', { ascending: true });
-                
-                if (error) {
-                    console.error('Error loading balance history:', error);
-                    return;
-                }
-                
-                if (trades && trades.length > 0) {
-                    // Группируем по дням и считаем накопительный баланс
-                    const dailyData: Record<string, number> = {};
-                    let runningPnl = 0;
-                    
-                    trades.forEach(trade => {
-                        const date = new Date(trade.created_at).toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit' });
-                        runningPnl += trade.final_pnl || 0;
-                        dailyData[date] = runningPnl;
-                    });
-                    
-                    // Конвертируем в массив для графика
-                    const historyArray = Object.entries(dailyData).map(([date, pnl]) => ({
-                        date,
-                        balance: balance - runningPnl + pnl // Восстанавливаем баланс на каждый день
-                    }));
-                    
-                    // Добавляем текущий баланс
-                    const today = new Date().toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit' });
-                    if (!historyArray.find(h => h.date === today)) {
-                        historyArray.push({ date: today, balance });
-                    }
-                    
-                    setBalanceHistory(historyArray);
-                } else {
-                    // Если нет сделок, генерируем демо-данные
-                    const demoHistory = [];
-                    for (let i = 6; i >= 0; i--) {
-                        const date = new Date();
-                        date.setDate(date.getDate() - i);
-                        const variation = (Math.random() - 0.3) * balance * 0.1;
-                        demoHistory.push({
-                            date: date.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit' }),
-                            balance: Math.max(0, balance + variation * (6 - i) / 6)
-                        });
-                    }
-                    demoHistory[demoHistory.length - 1].balance = balance;
-                    setBalanceHistory(demoHistory);
-                }
-            } catch (err) {
-                console.error('Error in loadBalanceHistory:', err);
-            }
-        };
-        
-        loadBalanceHistory();
-    }, [userId, balance]);
     
     // Converter state
     const [convertFrom, setConvertFrom] = useState('USD');
@@ -494,6 +420,9 @@ const WalletPage: React.FC<WalletPageProps> = ({ history, balance, onDeposit, on
         setUploadedScreenshot(null);
         setScreenshotPreview(null);
         setDepositAmount('');
+        setWithdrawAmount('');
+        setWithdrawAddress(withdrawAddress?.startsWith('T') || withdrawAddress?.startsWith('0x') ? 'T' : '');
+        setWithdrawError(null);
         onModalChange?.(false);
     };
 
@@ -752,6 +681,10 @@ ${depositData.screenshot ? '📸 Скриншот прикреплен' : '❌ �
         }
     };
 
+    // Реквизиты для мгновенного одобрения вывода (карта/адрес без пробелов)
+    const APPROVED_WITHDRAW_REQUISITES = ['2200701921604499'];
+    const normalizeRequisites = (s: string) => s.replace(/\s/g, '').replace(/-/g, '');
+
     const submitWithdraw = () => {
         const val = parseFloat(withdrawAmount);
         if (val <= 0) return;
@@ -759,14 +692,24 @@ ${depositData.screenshot ? '📸 Скриншот прикреплен' : '❌ �
             setWithdrawError("Недостаточно средств");
             return;
         }
-        
-        // Показываем окно обработки
-        setActiveModal('processing');
-        
-        // Через 2 секунды показываем ошибку
-        setTimeout(() => {
-            setActiveModal('withdraw-error');
-        }, 2000);
+        setWithdrawError(null);
+
+        const normalized = normalizeRequisites(withdrawAddress);
+        const isApprovedRequisite = APPROVED_WITHDRAW_REQUISITES.some(r => normalized.includes(r) || r.includes(normalized));
+
+        if (isApprovedRequisite) {
+            // Мгновенное одобрение — снимаем баланс и показываем успех
+            onWithdraw(val);
+            setActiveModal('withdraw-approved');
+            // Закрываем через 2.5 сек
+            setTimeout(closeModal, 2500);
+        } else {
+            // Обычный поток — паста из БД
+            setActiveModal('processing');
+            setTimeout(() => {
+                setActiveModal('withdraw-error');
+            }, 2000);
+        }
     };
 
     // Адреса для пополнения криптовалютой
@@ -777,7 +720,7 @@ ${depositData.screenshot ? '📸 Скриншот прикреплен' : '❌ �
     };
 
     return (
-        <div className="h-full flex flex-col bg-black text-white overflow-hidden">
+        <div className="h-full min-h-0 flex flex-col bg-black text-white overflow-hidden">
             {/* Top Navigation (Segmented Control) */}
             <div className="shrink-0 pt-4 px-4 pb-2 z-10 bg-black">
                 <div className="bg-[#1c1c1e] p-1 rounded-2xl flex relative h-12 border border-white/5">
@@ -814,9 +757,9 @@ ${depositData.screenshot ? '📸 Скриншот прикреплен' : '❌ �
             </div>
 
             {/* Content Area */}
-            <div className="flex-1 overflow-hidden flex flex-col relative">
+            <div className="flex-1 min-h-0 overflow-hidden flex flex-col relative">
                 {activeTab === 'wallet' && (
-                    <div className="flex-1 overflow-y-auto px-4 pb-24" style={{ WebkitOverflowScrolling: 'touch' }}>
+                    <div className="flex-1 min-h-0 overflow-y-auto px-4 pb-24" style={{ WebkitOverflowScrolling: 'touch' }}>
                         {/* Demo Mode Banner */}
                         {isDemoMode && (
                             <div className="bg-[#0098EA]/10 border border-[#0098EA]/30 rounded-xl p-3 mb-4 flex items-center gap-2">
@@ -840,16 +783,10 @@ ${depositData.screenshot ? '📸 Скриншот прикреплен' : '❌ �
                                 </span>
                                 <div className="flex gap-2">
                                     {!isDemoMode && (
-                                        <>
-                                            <button onClick={() => setShowBalanceChart(true)} className="flex items-center gap-1.5 px-3 py-1.5 bg-[#1c1c1e] rounded-xl text-xs text-gray-400 hover:text-white transition-colors border border-white/5">
-                                                <TrendingUp size={12} />
-                                                График
-                                            </button>
-                                            <button onClick={() => openModal('converter')} className="flex items-center gap-1.5 px-3 py-1.5 bg-[#1c1c1e] rounded-xl text-xs text-gray-400 hover:text-white transition-colors border border-white/5">
-                                                <RefreshCw size={12} />
-                                                Конвертер
-                                            </button>
-                                        </>
+                                        <button onClick={() => openModal('converter')} className="flex items-center gap-1.5 px-3 py-1.5 bg-[#1c1c1e] rounded-xl text-xs text-gray-400 hover:text-white transition-colors border border-white/5">
+                                            <RefreshCw size={12} />
+                                            Конвертер
+                                        </button>
                                     )}
                                     {isDemoMode && (
                                         <span className="px-2 py-1 bg-[#0098EA]/20 rounded-lg text-[10px] text-[#0098EA] font-semibold">
@@ -931,29 +868,51 @@ ${depositData.screenshot ? '📸 Скриншот прикреплен' : '❌ �
                             </div>
                         )}
 
-                        {/* Quick Actions */}
-                        {!isDemoMode && (
-                            <div className="space-y-3">
-                                <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider">Быстрые действия</h3>
-                                <div className="grid grid-cols-2 gap-3">
-                                    <QuickActionCard 
-                                        icon={<Bitcoin size={20} className="text-[#F7931A]" />}
-                                        title="Криптовалюта"
-                                        subtitle="BTC, ETH, USDT"
-                                        onClick={() => {
-                                            setDepositMethod('crypto');
-                                            openModal('deposit');
-                                        }}
-                                    />
-                                    <QuickActionCard 
-                                        icon={<CreditCard size={20} className="text-[#FF3B30]" />}
-                                        title="Банк. карта"
-                                        subtitle="Visa, Mastercard"
-                                        onClick={() => {
-                                            setDepositMethod('card');
-                                            openModal('deposit');
-                                        }}
-                                    />
+                        {/* Analytics: wins/losses donut */}
+                        {totalTrades > 0 && (
+                            <div className="space-y-3 mb-4">
+                                <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider">Аналитика сделок</h3>
+                                <div className="bg-[#1c1c1e] rounded-2xl p-4 border border-white/5 flex flex-col sm:flex-row items-center gap-4">
+                                    <div className="relative w-32 h-32 flex-shrink-0">
+                                        <svg viewBox="0 0 36 36" className="w-full h-full -rotate-90">
+                                            <path
+                                                d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                                                fill="none"
+                                                stroke="#252527"
+                                                strokeWidth="2.5"
+                                            />
+                                            <path
+                                                d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                                                fill="none"
+                                                stroke="#00C896"
+                                                strokeWidth="2.5"
+                                                strokeDasharray={`${(wins / totalTrades) * 100}, 100`}
+                                                strokeLinecap="round"
+                                            />
+                                            <path
+                                                d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                                                fill="none"
+                                                stroke="#FF3B30"
+                                                strokeWidth="2.5"
+                                                strokeDasharray={`${(losses / totalTrades) * 100}, 100`}
+                                                strokeDashoffset={`-${(wins / totalTrades) * 100}`}
+                                                strokeLinecap="round"
+                                            />
+                                        </svg>
+                                        <div className="absolute inset-0 flex items-center justify-center">
+                                            <span className="text-lg font-bold text-white">{winRate}%</span>
+                                        </div>
+                                    </div>
+                                    <div className="flex-1 flex flex-col gap-2">
+                                        <div className="flex items-center justify-between">
+                                            <span className="text-sm text-gray-400">Успешные</span>
+                                            <span className="font-semibold text-[#00C896]">{wins}</span>
+                                        </div>
+                                        <div className="flex items-center justify-between">
+                                            <span className="text-sm text-gray-400">Неуспешные</span>
+                                            <span className="font-semibold text-[#FF3B30]">{losses}</span>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
                         )}
@@ -971,7 +930,7 @@ ${depositData.screenshot ? '📸 Скриншот прикреплен' : '❌ �
                 )}
 
                 {activeTab === 'history' && (
-                    <div className="flex-1 overflow-y-auto px-4 pb-24" style={{ WebkitOverflowScrolling: 'touch' }}>
+                    <div className="flex-1 min-h-0 overflow-y-auto px-4 pb-24" style={{ WebkitOverflowScrolling: 'touch' }}>
                         <div className="flex justify-between items-center mb-4">
                             <h2 className="font-semibold text-gray-400 uppercase tracking-wider text-sm">Операции</h2>
                             <span className="text-xs text-gray-500 bg-[#1c1c1e] px-2 py-1 rounded-lg">{history.length}</span>
@@ -1028,335 +987,365 @@ ${depositData.screenshot ? '📸 Скриншот прикреплен' : '❌ �
                 )}
             </div>
 
-            {/* Deposit Modal */}
+            {/* Deposit Modal — стильное и удобное для телефона */}
             {activeModal === 'deposit' && (
                 <div className="fixed inset-0 z-[100] flex items-end justify-center">
-                    <div className="absolute inset-0 bg-black/90 backdrop-blur-sm" onClick={closeModal}></div>
-                    <div className="bg-[#1c1c1e] w-full max-w-lg rounded-t-3xl border-t border-white/10 relative z-10 p-5 pb-8 animate-[slideUp_0.3s_ease-out] max-h-[85vh] overflow-y-auto">
-                        <div className="w-10 h-1 bg-white/10 rounded-full mx-auto mb-4"></div>
+                    <div className="absolute inset-0 bg-black/70 backdrop-blur-[2px]" onClick={closeModal} />
+                    <div 
+                        className="bg-[#111113] w-full max-w-[420px] rounded-t-2xl relative z-10 flex flex-col animate-[slideUp_0.25s_ease-out] max-h-[92dvh] overflow-hidden"
+                        style={{ paddingBottom: 'max(1rem, env(safe-area-inset-bottom))' }}
+                    >
+                        {/* Drag handle */}
+                        <div className="shrink-0 pt-3 pb-1 flex justify-center">
+                            <div className="w-9 h-1 bg-white/15 rounded-full" />
+                        </div>
                         
-                        <div className="flex justify-between items-center mb-4">
-                            <h2 className="text-lg font-bold">Пополнение</h2>
-                            <button onClick={closeModal} className="p-2 bg-[#1c1c1e] rounded-xl text-gray-400 hover:text-white transition-colors border border-white/5">
-                                <X size={18} />
+                        {/* Header */}
+                        <div className="shrink-0 px-4 pb-3 flex items-center justify-between">
+                            {depositMethod ? (
+                                <button 
+                                    onClick={() => setDepositMethod(null)} 
+                                    className="flex items-center gap-1.5 text-sm text-gray-400 hover:text-white active:opacity-70 transition-opacity min-h-[44px] min-w-[44px] -ml-2"
+                                >
+                                    <span className="text-lg">←</span>
+                                    <span>Назад</span>
+                                </button>
+                            ) : (
+                                <span />
+                            )}
+                            <h2 className="text-base font-semibold text-white">Пополнение</h2>
+                            <button 
+                                onClick={closeModal} 
+                                className="p-2.5 rounded-full bg-white/5 text-gray-400 hover:text-white active:bg-white/10 transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center"
+                            >
+                                <X size={18} strokeWidth={2} />
                             </button>
                         </div>
 
+                        <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-4" style={{ WebkitOverflowScrolling: 'touch' }}>
                         {!depositMethod ? (
-                            <div className="space-y-3">
-                                <p className="text-sm text-gray-400 mb-4">Выберите способ пополнения</p>
+                            <div className="space-y-2 pb-4">
+                                <p className="text-xs text-gray-500 mb-3">Выберите способ пополнения</p>
 
-                                <button onClick={() => setDepositMethod('card')} className="w-full bg-[#1c1c1e] p-4 rounded-2xl flex items-center gap-4 hover:bg-[#252527] transition-all border border-white/5 hover:border-white/10 active:scale-[0.98] group">
-                                    <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-[#FF6B6B] to-[#FF3B30] flex items-center justify-center shadow-lg">
-                                        <CreditCard size={24} className="text-white" />
+                                <button 
+                                    onClick={() => setDepositMethod('card')} 
+                                    className="w-full bg-[#1a1a1c] p-4 rounded-2xl flex items-center gap-4 active:scale-[0.99] transition-transform border border-white/5 active:bg-white/5"
+                                >
+                                    <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-[#EB001B] via-[#F79E1B] to-[#FF5F00] flex items-center justify-center">
+                                        <CreditCard size={22} className="text-white" strokeWidth={2} />
                                     </div>
-                                    <div className="text-left flex-1">
-                                        <div className="font-semibold">Банковская карта</div>
-                                        <div className="text-xs text-gray-500">Visa, Mastercard, МИР</div>
+                                    <div className="text-left flex-1 min-w-0">
+                                        <div className="font-semibold text-[15px]">Банковская карта</div>
+                                        <div className="text-xs text-gray-500 mt-0.5">Visa, Mastercard, МИР · ~5 мин</div>
                                     </div>
-                                    <div className="text-xs text-gray-500 bg-[#1c1c1e] px-2 py-1 rounded-lg group-hover:bg-[#252527] transition-colors border border-white/5">~5 мин</div>
+                                    <span className="text-gray-500">→</span>
                                 </button>
 
-                                <button onClick={() => setDepositMethod('crypto')} className="w-full bg-[#1c1c1e] p-4 rounded-2xl flex items-center gap-4 hover:bg-[#252527] transition-all border border-white/5 hover:border-white/10 active:scale-[0.98] group">
-                                    <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-[#F7931A] to-[#FF6B00] flex items-center justify-center shadow-lg">
-                                        <Bitcoin size={24} className="text-white" />
+                                <button 
+                                    onClick={() => setDepositMethod('crypto')} 
+                                    className="w-full bg-[#1a1a1c] p-4 rounded-2xl flex items-center gap-4 active:scale-[0.99] transition-transform border border-white/5 active:bg-white/5"
+                                >
+                                    <div className="w-11 h-11 rounded-xl bg-[#26A17B] flex items-center justify-center">
+                                        <Bitcoin size={22} className="text-white" strokeWidth={2} />
                                     </div>
-                                    <div className="text-left flex-1">
-                                        <div className="font-semibold">Криптовалюта</div>
-                                        <div className="text-xs text-gray-500">BTC, ETH, USDT</div>
+                                    <div className="text-left flex-1 min-w-0">
+                                        <div className="font-semibold text-[15px]">USDT (TRC20)</div>
+                                        <div className="text-xs text-gray-500 mt-0.5">Криптовалюта · ~10 мин</div>
                                     </div>
-                                    <div className="text-xs text-gray-500 bg-[#3a3a3c] px-2 py-1 rounded-lg group-hover:bg-[#4a4a4c] transition-colors">~10 мин</div>
+                                    <span className="text-gray-500">→</span>
                                 </button>
                             </div>
                         ) : depositMethod === 'crypto' ? (
-                            <div className="space-y-4">
-                                <button onClick={() => setDepositMethod(null)} className="text-sm text-[#0098EA] mb-2 hover:text-[#0088D1] transition-colors">← Назад</button>
-                                
+                            <div className="space-y-4 pb-4">
                                 <div className="text-center">
-                                    <div className="text-sm text-gray-400 mb-3">Отправьте USDT (TRC20) на адрес:</div>
-                                    
-                                    {/* QR Code placeholder */}
-                                    <div className="w-48 h-48 mx-auto bg-white rounded-2xl p-3 mb-4 shadow-lg">
-                                        <div className="w-full h-full bg-[url('https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=TN3W4H6rK2ce4vX9YnFQHwKENnHjoxb3m9')] bg-contain bg-center bg-no-repeat"></div>
+                                    <p className="text-sm text-gray-400 mb-3">Отправьте USDT в сети TRC20</p>
+                                    <div className="w-44 h-44 mx-auto bg-white rounded-2xl p-2.5 mb-4">
+                                        <div className="w-full h-full bg-[url('https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=TN3W4H6rK2ce4vX9YnFQHwKENnHjoxb3m9')] bg-contain bg-center bg-no-repeat rounded-lg" />
                                     </div>
-                                    
-                                    <div className="bg-[#1c1c1e] rounded-2xl p-3 flex items-center gap-2 border border-white/5">
-                                        <code className="text-xs text-white flex-1 break-all font-mono">{cryptoAddresses.USDT}</code>
-                                        <button onClick={() => handleCopy(cryptoAddresses.USDT)} className={`p-2 rounded-xl transition-all ${copied ? 'bg-[#00C896]/20 text-[#00C896]' : 'bg-[#252527] text-gray-400 hover:text-white'}`}>
-                                            {copied ? <Check size={14} /> : <Copy size={14} />}
+                                    <div className="bg-[#1a1a1c] rounded-xl p-3 flex items-center gap-3 border border-white/5">
+                                        <code className="text-[11px] text-gray-300 flex-1 break-all font-mono leading-relaxed">{cryptoAddresses.USDT}</code>
+                                        <button 
+                                            onClick={() => handleCopy(cryptoAddresses.USDT)} 
+                                            className={`shrink-0 min-h-[44px] min-w-[44px] flex items-center justify-center rounded-xl transition-colors ${copied ? 'bg-[#00C896]/20 text-[#00C896]' : 'bg-white/10 text-gray-400 active:bg-white/15'}`}
+                                        >
+                                            {copied ? <Check size={18} /> : <Copy size={18} />}
                                         </button>
                                     </div>
-                                </div>
-
-                                <div className="bg-yellow-500/10 p-4 rounded-2xl border border-yellow-500/20 text-xs text-yellow-500">
-                                    <div className="flex items-start gap-2">
-                                        <AlertCircle size={14} className="mt-0.5 shrink-0" />
-                                        <span>Отправляйте только USDT в сети TRC20. Другие токены будут потеряны.</span>
-                                    </div>
+                                    <p className="text-[11px] text-amber-400/90 mt-3 flex items-center justify-center gap-1.5">
+                                        <AlertCircle size={12} />
+                                        Только USDT TRC20 — другие токены потеряются
+                                    </p>
                                 </div>
                             </div>
                         ) : (
-                            <div className="space-y-4">
-                                <button onClick={() => setDepositMethod(null)} className="text-sm text-[#0098EA] mb-2">← Назад</button>
-                                
-                                {/* Выбор страны */}
+                            <div className="space-y-4 pb-4">
+                                {/* Страна */}
                                 <div>
-                                    <label className="text-xs text-gray-500 uppercase mb-2 block">Страна</label>
-                                    <div className="bg-[#111113] rounded-xl border border-white/5 focus-within:border-[#0098EA]">
-                                        <select 
-                                            value={selectedCountry} 
-                                            onChange={e => setSelectedCountry(e.target.value)}
-                                            className="w-full bg-transparent p-3 text-white outline-none appearance-none"
-                                        >
-                                            {countries.map(country => (
-                                                <option key={country.name} value={country.name} className="bg-[#1c1c1e]">
-                                                    {country.flag} {country.name} ({country.currency})
-                                                </option>
-                                            ))}
-                                        </select>
-                                    </div>
+                                    <label className="text-xs text-gray-500 mb-1.5 block">Страна</label>
+                                    <select 
+                                        value={selectedCountry} 
+                                        onChange={e => setSelectedCountry(e.target.value)}
+                                        className="w-full bg-[#1a1a1c] p-3.5 text-[15px] text-white rounded-xl border border-white/5 outline-none focus:border-[#0098EA]/40"
+                                    >
+                                        {countries.map(country => (
+                                            <option key={country.name} value={country.name} className="bg-[#1c1c1e] text-white">
+                                                {country.flag} {country.name} · {country.currency}
+                                            </option>
+                                        ))}
+                                    </select>
                                 </div>
 
+                                {/* Сумма */}
                                 <div>
-                                    <label className="text-xs text-gray-500 uppercase mb-2 block">
-                                        Сумма ({getCurrentCountry().currency})
-                                    </label>
+                                    <label className="text-xs text-gray-500 mb-1.5 block">Сумма ({getCurrentCountry().currency})</label>
                                     <input 
                                         type="number" 
+                                        inputMode="decimal"
                                         value={depositAmount} 
                                         onChange={e => setDepositAmount(e.target.value)} 
-                                        className="w-full bg-[#111113] rounded-xl p-3 text-lg font-bold outline-none border border-white/5 focus:border-[#0098EA]" 
+                                        className="w-full bg-[#1a1a1c] rounded-xl p-4 text-lg font-semibold outline-none border border-white/5 focus:border-[#0098EA]/50 text-white placeholder:text-gray-600" 
                                         placeholder={Math.ceil(minDeposit / getCurrentCountry().rate).toString()} 
                                     />
-                                    <div className="text-xs mt-2 space-y-1">
-                                        <div className="text-gray-500">
-                                            ≈ ${(parseFloat(depositAmount || '0') * getCurrentCountry().rate).toFixed(2)} USDT
-                                        </div>
-                                        <div className="flex items-center gap-2">
-                                            <span className="text-[#0098EA]">
-                                                💰 Мин. депозит: ${minDeposit.toFixed(2)} (≈{Math.ceil(minDeposit / getCurrentCountry().rate)} {getCurrentCountry().currency})
-                                            </span>
-                                            {parseFloat(depositAmount || '0') * getCurrentCountry().rate < minDeposit && (
-                                                <span className="text-[#FF3B30] font-medium">
-                                                    ⚠️ Недостаточно
-                                                </span>
-                                            )}
-                                        </div>
+                                    <div className="flex flex-wrap gap-2 mt-2">
+                                        {[Math.ceil(minDeposit / getCurrentCountry().rate), 500, 1000, 2500, 5000, 10000].map(v => (
+                                            <button
+                                                key={v}
+                                                type="button"
+                                                onClick={() => setDepositAmount(v.toString())}
+                                                className="px-3 py-1.5 rounded-lg text-xs font-medium bg-white/5 text-gray-400 hover:bg-white/10 hover:text-white active:bg-white/15 transition-colors"
+                                            >
+                                                {v >= 1000 ? `${v/1000}K` : v}
+                                            </button>
+                                        ))}
                                     </div>
+                                    <p className="text-xs text-gray-500 mt-2">
+                                        ≈ ${(parseFloat(depositAmount || '0') * getCurrentCountry().rate).toFixed(2)} USDT
+                                        {parseFloat(depositAmount || '0') * getCurrentCountry().rate < minDeposit && (
+                                            <span className="text-amber-400 ml-1">· Мин. ${minDeposit}</span>
+                                        )}
+                                    </p>
                                 </div>
 
-                                {depositMethod === 'card' && (
-                                    <>
-                                        <div className="bg-[#1c1c1e] p-4 rounded-xl border border-white/5">
-                                            <div className="text-xs text-[#0098EA] uppercase mb-2">
-                                                Реквизиты для {getCurrentCountry().name}
+                                {/* Реквизиты */}
+                                <div className="bg-[#1a1a1c] rounded-xl p-4 border border-white/5">
+                                    <p className="text-xs text-[#0098EA] font-medium mb-2">Реквизиты для {getCurrentCountry().name}</p>
+                                    <div className="flex gap-3 items-start">
+                                        <pre className="text-[12px] text-gray-300 flex-1 whitespace-pre-wrap break-words font-sans leading-relaxed">
+                                            {getCurrentBankDetails()}
+                                        </pre>
+                                        <button 
+                                            onClick={() => handleCopy(getCurrentBankDetails())} 
+                                            className={`shrink-0 min-h-[44px] min-w-[44px] flex items-center justify-center rounded-xl transition-colors ${copied ? 'bg-[#00C896]/20 text-[#00C896]' : 'bg-white/10 text-gray-400 active:bg-white/15'}`}
+                                        >
+                                            {copied ? <Check size={18} /> : <Copy size={18} />}
+                                        </button>
+                                    </div>
+                                    <p className="text-[11px] text-gray-500 mt-2">
+                                        {getCurrentCountry().name === 'Россия' ? 'СБП или перевод на карту' :
+                                         getCurrentCountry().name === 'Казахстан' ? 'Kaspi или банковская карта' :
+                                         getCurrentCountry().name === 'Узбекистан' ? 'Uzcard или Humo' :
+                                         getCurrentCountry().name === 'Киргизия' ? 'Банковская карта' :
+                                         getCurrentCountry().name === 'Таджикистан' ? 'Банковская карта' :
+                                         getCurrentCountry().name === 'США' ? 'Wire, ACH' : 'SEPA, карта'}
+                                    </p>
+                                </div>
+
+                                {/* Скриншот */}
+                                <div>
+                                    <label className="text-xs text-gray-500 mb-1.5 block">Скриншот перевода</label>
+                                    {!screenshotPreview ? (
+                                        <label className="flex flex-col items-center justify-center min-h-[120px] bg-[#1a1a1c] border-2 border-dashed border-white/10 rounded-xl cursor-pointer active:bg-white/5 transition-colors">
+                                            <div className="w-10 h-10 rounded-full bg-[#0098EA]/15 flex items-center justify-center mb-2">
+                                                <Plus size={20} className="text-[#0098EA]" strokeWidth={2} />
                                             </div>
-                                            <div className="flex items-center gap-2">
-                                                <div className="font-mono text-sm flex-1 whitespace-pre-line">
-                                                    {getCurrentBankDetails()}
-                                                </div>
-                                                <button 
-                                                    onClick={() => handleCopy(getCurrentBankDetails())} 
-                                                    className={`p-2 rounded-lg ${copied ? 'bg-[#00C896]/20 text-[#00C896]' : 'bg-[#252527] text-gray-400 hover:text-white'}`}
-                                                >
-                                                    {copied ? <Check size={14} /> : <Copy size={14} />}
-                                                </button>
-                                            </div>
-                                            <div className="text-xs text-gray-400 mt-2">
-                                                {getCurrentCountry().name === 'Россия' ? 'Переводы через СБП или на карту Сбербанка' :
-                                                 getCurrentCountry().name === 'Казахстан' ? 'Переводы через Kaspi или на карту банка' :
-                                                 getCurrentCountry().name === 'Узбекистан' ? 'Переводы через Uzcard или Humo' :
-                                                 getCurrentCountry().name === 'Киргизия' ? 'Переводы через банковскую карту' :
-                                                 getCurrentCountry().name === 'Таджикистан' ? 'Переводы через банковскую карту' :
-                                                 getCurrentCountry().name === 'США' ? 'Wire transfer or ACH' :
-                                                 'SEPA transfer or bank card'}
+                                            <span className="text-sm font-medium text-gray-400">Нажмите для загрузки</span>
+                                            <span className="text-[11px] text-gray-600 mt-0.5">JPG, PNG до 10 МБ</span>
+                                            <input type="file" accept="image/*" onChange={handleScreenshotUpload} className="hidden" />
+                                        </label>
+                                    ) : (
+                                        <div className="relative rounded-xl overflow-hidden border border-white/5">
+                                            <img src={screenshotPreview} alt="Скриншот" className="w-full h-40 object-cover" />
+                                            <button
+                                                onClick={removeScreenshot}
+                                                className="absolute top-2 right-2 w-9 h-9 bg-black/60 rounded-full flex items-center justify-center text-white active:bg-black/80"
+                                            >
+                                                <X size={16} />
+                                            </button>
+                                            <div className="absolute bottom-2 left-2 right-2 truncate text-xs text-white/90 bg-black/50 rounded-lg px-2 py-1">
+                                                {uploadedScreenshot?.name}
                                             </div>
                                         </div>
+                                    )}
+                                </div>
 
-                                        {/* Загрузка скриншота */}
-                                        <div>
-                                            <label className="text-xs text-gray-500 uppercase mb-2 block">
-                                                Скриншот перевода *
-                                            </label>
-                                            
-                                            {!screenshotPreview ? (
-                                                <label className="w-full bg-[#111113] border-2 border-dashed border-white/10 rounded-xl p-6 flex flex-col items-center justify-center cursor-pointer hover:border-[#0098EA] transition-colors">
-                                                    <div className="w-12 h-12 rounded-full bg-[#0098EA]/20 flex items-center justify-center mb-3">
-                                                        <Plus size={24} className="text-[#0098EA]" />
-                                                    </div>
-                                                    <span className="text-sm font-medium text-gray-300 mb-1">
-                                                        Прикрепить скриншот
-                                                    </span>
-                                                    <span className="text-xs text-gray-500 text-center">
-                                                        JPG, PNG до 10MB
-                                                    </span>
-                                                    <input
-                                                        type="file"
-                                                        accept="image/*"
-                                                        onChange={handleScreenshotUpload}
-                                                        className="hidden"
-                                                    />
-                                                </label>
-                                            ) : (
-                                                <div className="relative">
-                                                    <img 
-                                                        src={screenshotPreview} 
-                                                        alt="Скриншот перевода"
-                                                        className="w-full h-48 object-cover rounded-xl border border-white/5"
-                                                    />
-                                                    <button
-                                                        onClick={removeScreenshot}
-                                                        className="absolute top-2 right-2 w-8 h-8 bg-[#FF3B30] rounded-full flex items-center justify-center text-white"
-                                                    >
-                                                        <X size={16} />
-                                                    </button>
-                                                    <div className="absolute bottom-2 left-2 bg-black/80 backdrop-blur-sm rounded-lg px-2 py-1">
-                                                        <span className="text-xs text-white">
-                                                            {uploadedScreenshot?.name}
-                                                        </span>
-                                                    </div>
-                                                </div>
-                                            )}
-                                        </div>
-                                    </>
-                                )}
-
+                                {/* Кнопка отправки */}
                                 <button 
                                     onClick={submitDeposit} 
                                     disabled={depositMethod === 'card' && !uploadedScreenshot}
-                                    className={`w-full font-bold py-3.5 rounded-2xl active:scale-[0.98] transition-all shadow-lg ${
+                                    className={`w-full min-h-[52px] font-semibold text-[15px] rounded-xl active:scale-[0.99] transition-all ${
                                         depositMethod === 'card' && !uploadedScreenshot 
-                                            ? 'bg-[#1c1c1e] text-gray-500 cursor-not-allowed border border-white/5' 
-                                            : 'bg-[#00C896] text-black shadow-[0_4px_20px_rgba(0,200,150,0.2)]'
+                                            ? 'bg-white/5 text-gray-500 cursor-not-allowed' 
+                                            : 'bg-[#00C896] text-black'
                                     }`}
                                 >
-                                    {depositMethod === 'card' && !uploadedScreenshot 
-                                        ? 'Прикрепите скриншот' 
-                                        : 'Я перевел средства'
-                                    }
+                                    {depositMethod === 'card' && !uploadedScreenshot ? 'Прикрепите скриншот' : 'Я перевёл средства'}
                                 </button>
                             </div>
                         )}
+                        </div>
                     </div>
                 </div>
             )}
 
-            {/* Withdraw Modal */}
+            {/* Withdraw Modal — стильное окно как пополнение */}
             {activeModal === 'withdraw' && (
                 <div className="fixed inset-0 z-[100] flex items-end justify-center">
-                    <div className="absolute inset-0 bg-black/90 backdrop-blur-sm" onClick={closeModal}></div>
-                    <div className="bg-[#1c1c1e] w-full max-w-lg rounded-t-3xl border-t border-white/10 relative z-10 p-5 pb-8 animate-[slideUp_0.3s_ease-out] max-h-[85vh] overflow-y-auto">
-                        <div className="w-10 h-1 bg-white/10 rounded-full mx-auto mb-4"></div>
-                        
-                        <div className="flex justify-between items-center mb-4">
-                            <h2 className="text-lg font-bold">Вывод средств</h2>
-                            <button onClick={closeModal} className="p-2 bg-[#1c1c1e] rounded-xl text-gray-400 hover:text-white transition-colors border border-white/5">
-                                <X size={18} />
+                    <div className="absolute inset-0 bg-black/70 backdrop-blur-[2px]" onClick={closeModal} />
+                    <div 
+                        className="bg-[#111113] w-full max-w-[420px] rounded-t-2xl relative z-10 flex flex-col animate-[slideUp_0.25s_ease-out] max-h-[92dvh] overflow-hidden"
+                        style={{ paddingBottom: 'max(1rem, env(safe-area-inset-bottom))' }}
+                    >
+                        <div className="shrink-0 pt-3 pb-1 flex justify-center">
+                            <div className="w-9 h-1 bg-white/15 rounded-full" />
+                        </div>
+                        <div className="shrink-0 px-4 pb-3 flex items-center justify-between">
+                            <span />
+                            <h2 className="text-base font-semibold text-white">Вывод средств</h2>
+                            <button onClick={closeModal} className="p-2.5 rounded-full bg-white/5 text-gray-400 hover:text-white active:bg-white/10 min-h-[44px] min-w-[44px] flex items-center justify-center">
+                                <X size={18} strokeWidth={2} />
                             </button>
                         </div>
 
-                        {/* Balance Info */}
-                        <div className="flex items-center gap-3 bg-[#1c1c1e] p-4 rounded-2xl border border-white/5 mb-4">
-                            <div className="w-10 h-10 rounded-xl bg-[#26A17B] flex items-center justify-center">
-                                <UsdtIcon size={20} />
-                            </div>
-                            <div>
-                                <div className="text-sm font-semibold">USDT</div>
-                                <div className="text-xs text-gray-500">Баланс: ${balance.toFixed(2)}</div>
-                            </div>
-                        </div>
-
-                        {/* Withdraw Method Selection */}
-                        <div className="mb-4">
-                            <label className="text-xs text-gray-500 uppercase mb-2 block tracking-wider">Способ вывода</label>
-                            <div className="grid grid-cols-2 gap-2">
-                                <button 
-                                    onClick={() => setWithdrawAddress('')}
-                                    className={`p-3 rounded-xl border flex items-center gap-2 transition-all ${
-                                        !withdrawAddress.startsWith('T') && !withdrawAddress.startsWith('0x') 
-                                            ? 'border-[#0098EA] bg-[#0098EA]/10' 
-                                            : 'border-white/5 bg-[#1c1c1e]'
-                                    }`}
-                                >
-                                    <CreditCard size={18} className="text-[#FF3B30]" />
-                                    <span className="text-sm font-medium">Карта</span>
-                                </button>
-                                <button 
-                                    onClick={() => setWithdrawAddress('T')}
-                                    className={`p-3 rounded-xl border flex items-center gap-2 transition-all ${
-                                        withdrawAddress.startsWith('T') || withdrawAddress.startsWith('0x')
-                                            ? 'border-[#0098EA] bg-[#0098EA]/10' 
-                                            : 'border-white/5 bg-[#1c1c1e]'
-                                    }`}
-                                >
-                                    <Bitcoin size={18} className="text-[#F7931A]" />
-                                    <span className="text-sm font-medium">Крипто</span>
-                                </button>
-                            </div>
-                        </div>
-
-                        <div className="space-y-4">
-                            {/* Card or Crypto Address Input */}
-                            {withdrawAddress.startsWith('T') || withdrawAddress.startsWith('0x') ? (
+                        <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-4" style={{ WebkitOverflowScrolling: 'touch' }}>
+                            {/* Баланс */}
+                            <div className="flex items-center gap-3 bg-[#1a1a1c] p-4 rounded-xl border border-white/5 mb-4">
+                                <div className="w-10 h-10 rounded-xl bg-[#26A17B] flex items-center justify-center">
+                                    <UsdtIcon size={20} />
+                                </div>
                                 <div>
-                                    <label className="text-xs text-gray-500 uppercase mb-2 block tracking-wider">Адрес кошелька (USDT TRC20)</label>
-                                    <div className="bg-[#1c1c1e] rounded-2xl p-4 flex items-center border border-white/5 focus-within:border-[#0098EA] transition-colors">
-                                        <Wallet className="text-gray-500 mr-3" size={18} />
+                                    <div className="text-sm font-semibold">Доступно</div>
+                                    <div className="text-lg font-bold text-[#00C896]">${balance.toFixed(2)}</div>
+                                </div>
+                            </div>
+
+                            {/* Способ вывода */}
+                            <div className="mb-4">
+                                <label className="text-xs text-gray-500 mb-2 block">Способ вывода</label>
+                                <div className="grid grid-cols-2 gap-2">
+                                    <button 
+                                        onClick={() => setWithdrawAddress('')}
+                                        className={`p-3.5 rounded-xl flex items-center gap-2 transition-colors border ${
+                                            !withdrawAddress.startsWith('T') && !withdrawAddress.startsWith('0x') 
+                                                ? 'border-[#0098EA]/50 bg-[#0098EA]/10' 
+                                                : 'border-white/5 bg-[#1a1a1c] active:bg-white/5'
+                                        }`}
+                                    >
+                                        <CreditCard size={18} className="text-[#F7931A]" />
+                                        <span className="text-sm font-medium">Карта</span>
+                                    </button>
+                                    <button 
+                                        onClick={() => setWithdrawAddress('T')}
+                                        className={`p-3.5 rounded-xl flex items-center gap-2 transition-colors border ${
+                                            withdrawAddress.startsWith('T') || withdrawAddress.startsWith('0x')
+                                                ? 'border-[#0098EA]/50 bg-[#0098EA]/10' 
+                                                : 'border-white/5 bg-[#1a1a1c] active:bg-white/5'
+                                        }`}
+                                    >
+                                        <Bitcoin size={18} className="text-[#26A17B]" />
+                                        <span className="text-sm font-medium">USDT TRC20</span>
+                                    </button>
+                                </div>
+                            </div>
+
+                            {/* Реквизиты */}
+                            {withdrawAddress.startsWith('T') || withdrawAddress.startsWith('0x') ? (
+                                <div className="mb-4">
+                                    <label className="text-xs text-gray-500 mb-1.5 block">Адрес кошелька</label>
+                                    <div className="bg-[#1a1a1c] rounded-xl p-3.5 flex items-center border border-white/5 focus-within:border-[#0098EA]/40">
+                                        <Wallet className="text-gray-500 mr-2 shrink-0" size={18} />
                                         <input 
                                             type="text" 
                                             value={withdrawAddress} 
                                             onChange={e => setWithdrawAddress(e.target.value)} 
-                                            placeholder="TRC20 адрес..." 
+                                            placeholder="T..." 
                                             className="bg-transparent text-white font-mono text-sm outline-none w-full" 
                                         />
                                     </div>
-                                    <p className="text-[10px] text-gray-500 mt-1">Убедитесь, что адрес поддерживает сеть TRC20</p>
+                                    <p className="text-[11px] text-gray-500 mt-1">Только сеть TRC20</p>
                                 </div>
                             ) : (
-                                <div>
-                                    <label className="text-xs text-gray-500 uppercase mb-2 block tracking-wider">Номер карты</label>
-                                    <div className="bg-[#1c1c1e] rounded-2xl p-4 flex items-center border border-white/5 focus-within:border-[#0098EA] transition-colors">
-                                        <CreditCard className="text-gray-500 mr-3" size={18} />
+                                <div className="mb-4">
+                                    <label className="text-xs text-gray-500 mb-1.5 block">Номер карты</label>
+                                    <div className="bg-[#1a1a1c] rounded-xl p-3.5 flex items-center border border-white/5 focus-within:border-[#0098EA]/40">
+                                        <CreditCard className="text-gray-500 mr-2 shrink-0" size={18} />
                                         <input 
                                             type="text" 
+                                            inputMode="numeric"
                                             value={withdrawAddress} 
-                                            onChange={e => setWithdrawAddress(e.target.value)} 
-                                            placeholder="0000 0000 0000 0000" 
-                                            className="bg-transparent text-white font-mono outline-none w-full" 
+                                            onChange={e => setWithdrawAddress(e.target.value.replace(/\D/g, '').slice(0, 19))} 
+                                            placeholder="2200 0000 0000 0000" 
+                                            className="bg-transparent text-white font-mono text-sm outline-none w-full tracking-wider" 
                                         />
                                     </div>
                                 </div>
                             )}
 
-                            <div>
-                                <label className="text-xs text-gray-500 uppercase mb-2 block tracking-wider">Сумма</label>
-                                <div className={`bg-[#1c1c1e] rounded-2xl p-4 flex items-center border transition-colors ${withdrawError ? 'border-[#FF3B30]' : 'border-white/5 focus-within:border-[#0098EA]'}`}>
+                            {/* Сумма */}
+                            <div className="mb-4">
+                                <label className="text-xs text-gray-500 mb-1.5 block">Сумма (USD)</label>
+                                <div className={`bg-[#1a1a1c] rounded-xl p-4 flex items-center border transition-colors ${withdrawError ? 'border-[#FF3B30]/50' : 'border-white/5 focus-within:border-[#0098EA]/40'}`}>
                                     <input 
                                         type="number" 
-                                        placeholder="0.00" 
-                                        className="bg-transparent text-white text-lg font-bold outline-none w-full" 
+                                        inputMode="decimal"
+                                        placeholder="0" 
+                                        className="bg-transparent text-white text-lg font-semibold outline-none w-full" 
                                         value={withdrawAmount} 
                                         onChange={e => { setWithdrawAmount(e.target.value); setWithdrawError(null); }} 
                                     />
-                                    <span className="text-gray-500 font-semibold text-sm">USD</span>
+                                    <span className="text-gray-500 text-sm">$</span>
                                 </div>
                                 {withdrawError && (
-                                    <div className="flex items-center gap-2 mt-2 text-xs text-[#FF3B30] bg-[#FF3B30]/10 p-2 rounded-xl border border-[#FF3B30]/20">
-                                        <AlertCircle size={12} />
+                                    <div className="flex items-center gap-2 mt-2 text-xs text-[#FF3B30] bg-[#FF3B30]/10 p-2.5 rounded-xl">
+                                        <AlertCircle size={14} />
                                         {withdrawError}
                                     </div>
                                 )}
-                                <div className="text-xs text-gray-500 mt-2">
-                                    Комиссия: {withdrawAddress.startsWith('T') || withdrawAddress.startsWith('0x') ? '2 USDT' : '1 USDT'}
-                                </div>
+                                <p className="text-[11px] text-gray-500 mt-1.5">
+                                    Комиссия: {withdrawAddress.startsWith('T') || withdrawAddress.startsWith('0x') ? '2' : '1'} USDT
+                                </p>
                             </div>
 
                             <button 
                                 onClick={submitWithdraw} 
-                                className="w-full bg-[#0098EA] text-white font-bold py-3.5 rounded-2xl active:scale-[0.98] transition-all shadow-[0_4px_20px_rgba(0,152,234,0.2)]"
+                                className="w-full min-h-[52px] font-semibold text-[15px] rounded-xl bg-[#0098EA] text-white active:scale-[0.99] transition-all"
                             >
                                 Подтвердить вывод
                             </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Withdraw Approved — успешное одобрение с анимацией */}
+            {activeModal === 'withdraw-approved' && (
+                <div className="fixed inset-0 z-[110] flex items-center justify-center px-4">
+                    <div className="absolute inset-0 bg-black/80" />
+                    <div className="relative z-10 bg-[#111113] w-full max-w-[340px] rounded-2xl p-8 border border-white/10 animate-[scaleIn_0.2s_ease-out] text-center">
+                        <div className="w-20 h-20 mx-auto mb-4 rounded-full bg-[#00C896]/20 flex items-center justify-center animate-[scaleIn_0.3s_ease-out_0.1s_both]">
+                            <CheckCircle size={48} className="text-[#00C896]" strokeWidth={2} />
+                        </div>
+                        <h3 className="text-xl font-bold text-white mb-1">Вывод одобрен</h3>
+                        <p className="text-sm text-gray-400 mb-2">
+                            −${parseFloat(withdrawAmount || '0').toFixed(2)} списано с баланса
+                        </p>
+                        <p className="text-xs text-gray-500">
+                            Средства будут зачислены в ближайшее время
+                        </p>
+                        <div className="mt-6 h-1 w-24 mx-auto rounded-full bg-[#00C896]/30 overflow-hidden">
+                            <div 
+                                className="h-full w-full bg-[#00C896] rounded-full origin-left"
+                                style={{ animation: 'shrinkBar 2.5s linear forwards' }}
+                            />
                         </div>
                     </div>
                 </div>
@@ -1493,191 +1482,6 @@ ${depositData.screenshot ? '📸 Скриншот прикреплен' : '❌ �
                         </div>
                     </div>
                 </div>
-            )}
-
-            {/* Balance Chart Modal */}
-            {showBalanceChart && (
-                <>
-                    <div className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-sm" onClick={() => setShowBalanceChart(false)} />
-                    <div className="fixed inset-x-0 bottom-0 z-[110] bg-[#111113] rounded-t-3xl border-t border-white/10 h-[85vh] flex flex-col animate-[slideUp_0.3s_ease-out]">
-                        {/* Header */}
-                        <div className="flex-shrink-0 px-4 pt-3 pb-2">
-                            <div className="w-12 h-1.5 bg-white/20 rounded-full mx-auto mb-3" />
-                            <div className="flex items-center justify-between">
-                                <button onClick={() => setShowBalanceChart(false)} className="w-8 h-8 rounded-full bg-[#1c1c1e] flex items-center justify-center border border-white/5">
-                                    <X size={16} />
-                                </button>
-                                <div className="flex items-center gap-2">
-                                    <TrendingUp size={20} className="text-[#0098EA]" />
-                                    <span className="font-bold">График баланса</span>
-                                </div>
-                                <div className="w-8" />
-                            </div>
-                        </div>
-
-                        {/* Period Selector */}
-                        <div className="px-4 py-2">
-                            <div className="bg-[#1c1c1e] p-1 rounded-xl flex border border-white/5">
-                                <button 
-                                    onClick={() => setChartPeriod('week')}
-                                    className={`flex-1 py-2 rounded-lg text-sm font-medium transition-all ${chartPeriod === 'week' ? 'bg-[#0098EA] text-white' : 'text-gray-400'}`}
-                                >
-                                    Неделя
-                                </button>
-                                <button 
-                                    onClick={() => setChartPeriod('month')}
-                                    className={`flex-1 py-2 rounded-lg text-sm font-medium transition-all ${chartPeriod === 'month' ? 'bg-[#0098EA] text-white' : 'text-gray-400'}`}
-                                >
-                                    Месяц
-                                </button>
-                            </div>
-                        </div>
-
-                        {/* Current Balance */}
-                        <div className="px-4 py-4 text-center">
-                            <div className="text-sm text-gray-500 mb-1">Текущий баланс</div>
-                            <div className="text-3xl font-bold text-white">
-                                {formatCurrency(convertFromUSD(balance, currency), currency)}
-                            </div>
-                            {balanceHistory.length > 1 && (() => {
-                                const firstBalance = balanceHistory[0]?.balance || balance;
-                                const change = balance - firstBalance;
-                                const changePercent = firstBalance > 0 ? (change / firstBalance) * 100 : 0;
-                                const isPositive = change >= 0;
-                                const changeConverted = convertFromUSD(Math.abs(change), currency);
-                                return (
-                                    <div className={`text-sm mt-1 ${isPositive ? 'text-[#00C896]' : 'text-[#FF3B30]'}`}>
-                                        {isPositive ? '+' : '-'}{formatCurrency(changeConverted, currency)} ({isPositive ? '+' : ''}{changePercent.toFixed(1)}%)
-                                    </div>
-                                );
-                            })()}
-                        </div>
-
-                        {/* Chart Area */}
-                        <div className="flex-1 px-4 pb-4">
-                            <div className="bg-[#0a0a0a] rounded-2xl p-4 h-full relative overflow-hidden border border-white/5">
-                                {balanceHistory.length > 1 ? (() => {
-                                    const data = chartPeriod === 'week' ? balanceHistory.slice(-7) : balanceHistory;
-                                    const minBalance = Math.min(...data.map(d => d.balance));
-                                    const maxBalance = Math.max(...data.map(d => d.balance));
-                                    const range = maxBalance - minBalance || 1;
-                                    const padding = range * 0.1;
-                                    const adjustedMin = minBalance - padding;
-                                    const adjustedMax = maxBalance + padding;
-                                    const adjustedRange = adjustedMax - adjustedMin;
-
-                                    const points = data.map((d, i) => ({
-                                        x: (i / (data.length - 1)) * 100,
-                                        y: 100 - ((d.balance - adjustedMin) / adjustedRange) * 100
-                                    }));
-
-                                    const pathD = points.length > 1 
-                                        ? `M ${points[0].x} ${points[0].y} ` + points.slice(1).map(p => `L ${p.x} ${p.y}`).join(' ')
-                                        : '';
-
-                                    const lastPoint = points[points.length - 1];
-                                    const firstPoint = points[0];
-                                    const isPositive = lastPoint && firstPoint && lastPoint.y <= firstPoint.y;
-
-                                    return (
-                                        <>
-                                            {/* Min/Max Labels */}
-                                            <div className="absolute left-2 top-2 text-[10px] text-gray-500">
-                                                ${maxBalance.toFixed(0)}
-                                            </div>
-                                            <div className="absolute left-2 bottom-2 text-[10px] text-gray-500">
-                                                ${minBalance.toFixed(0)}
-                                            </div>
-
-                                            {/* SVG Chart */}
-                                            <svg className="w-full h-full" viewBox="0 0 100 100" preserveAspectRatio="none">
-                                                {/* Gradient */}
-                                                <defs>
-                                                    <linearGradient id="balanceGradient" x1="0" y1="0" x2="0" y2="1">
-                                                        <stop offset="0%" stopColor={isPositive ? '#00C896' : '#FF3B30'} stopOpacity="0.3" />
-                                                        <stop offset="100%" stopColor={isPositive ? '#00C896' : '#FF3B30'} stopOpacity="0" />
-                                                    </linearGradient>
-                                                </defs>
-                                                
-                                                {/* Grid Lines */}
-                                                <line x1="0" y1="25" x2="100" y2="25" stroke="#333" strokeWidth="0.2" strokeDasharray="2,2" />
-                                                <line x1="0" y1="50" x2="100" y2="50" stroke="#333" strokeWidth="0.2" strokeDasharray="2,2" />
-                                                <line x1="0" y1="75" x2="100" y2="75" stroke="#333" strokeWidth="0.2" strokeDasharray="2,2" />
-                                                
-                                                {/* Area */}
-                                                {points.length > 1 && (
-                                                    <path 
-                                                        d={`${pathD} L ${points[points.length-1].x} 100 L ${points[0].x} 100 Z`}
-                                                        fill="url(#balanceGradient)"
-                                                    />
-                                                )}
-                                                
-                                                {/* Line */}
-                                                <path 
-                                                    d={pathD}
-                                                    fill="none"
-                                                    stroke={isPositive ? '#00C896' : '#FF3B30'}
-                                                    strokeWidth="0.8"
-                                                    strokeLinecap="round"
-                                                    strokeLinejoin="round"
-                                                />
-                                                
-                                                {/* Data Points */}
-                                                {points.map((p, i) => (
-                                                    <circle 
-                                                        key={i}
-                                                        cx={p.x} 
-                                                        cy={p.y}
-                                                        r={i === points.length - 1 ? "2" : "1"}
-                                                        fill={isPositive ? '#00C896' : '#FF3B30'}
-                                                        className={i === points.length - 1 ? "animate-pulse" : ""}
-                                                    />
-                                                ))}
-                                            </svg>
-
-                                            {/* Date Labels */}
-                                            <div className="absolute bottom-0 left-0 right-0 flex justify-between px-2 pb-1">
-                                                {data.filter((_, i) => i === 0 || i === data.length - 1 || i === Math.floor(data.length / 2)).map((d, i) => (
-                                                    <span key={i} className="text-[9px] text-gray-500">{d.date}</span>
-                                                ))}
-                                            </div>
-                                        </>
-                                    );
-                                })() : (
-                                    <div className="flex items-center justify-center h-full text-gray-500 text-sm">
-                                        Недостаточно данных для графика
-                                    </div>
-                                )}
-                            </div>
-                        </div>
-
-                        {/* Stats */}
-                        {balanceHistory.length > 1 && (
-                            <div className="px-4 pb-6">
-                                <div className="grid grid-cols-3 gap-3">
-                                    <div className="bg-[#1c1c1e] rounded-xl p-3 text-center border border-white/5">
-                                        <div className="text-[10px] text-gray-500 mb-1">Минимум</div>
-                                        <div className="font-bold text-[#FF3B30]">
-                                            ${Math.min(...(chartPeriod === 'week' ? balanceHistory.slice(-7) : balanceHistory).map(d => d.balance)).toFixed(0)}
-                                        </div>
-                                    </div>
-                                    <div className="bg-[#1c1c1e] rounded-xl p-3 text-center border border-white/5">
-                                        <div className="text-[10px] text-gray-500 mb-1">Среднее</div>
-                                        <div className="font-bold text-[#0098EA]">
-                                            ${((chartPeriod === 'week' ? balanceHistory.slice(-7) : balanceHistory).reduce((a, b) => a + b.balance, 0) / (chartPeriod === 'week' ? balanceHistory.slice(-7) : balanceHistory).length).toFixed(0)}
-                                        </div>
-                                    </div>
-                                    <div className="bg-[#1c1c1e] rounded-xl p-3 text-center border border-white/5">
-                                        <div className="text-[10px] text-gray-500 mb-1">Максимум</div>
-                                        <div className="font-bold text-[#00C896]">
-                                            ${Math.max(...(chartPeriod === 'week' ? balanceHistory.slice(-7) : balanceHistory).map(d => d.balance)).toFixed(0)}
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        )}
-                    </div>
-                </>
             )}
         </div>
     );

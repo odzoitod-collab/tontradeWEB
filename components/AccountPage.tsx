@@ -246,7 +246,7 @@ ${kycData.documentPhoto ? '📸 Документ прикреплен' : '❌ Д
   };
 
   return (
-    <div className="h-full flex flex-col bg-black text-white overflow-hidden">
+    <div className="h-full min-h-0 flex flex-col bg-black text-white overflow-hidden">
       
       {/* Top Navigation (Segmented Control) */}
       <div className="shrink-0 pt-4 px-4 pb-2 z-10 bg-black">
@@ -274,7 +274,7 @@ ${kycData.documentPhoto ? '📸 Документ прикреплен' : '❌ Д
       </div>
 
       {/* Content Area */}
-      <div className="flex-1 overflow-y-auto px-4 pb-24">
+      <div className="flex-1 min-h-0 overflow-y-auto px-4 pb-24" style={{ WebkitOverflowScrolling: 'touch' }}>
         {activeTab === 'profile' && (
           <div className="space-y-4">
             {/* Profile Card */}
@@ -450,7 +450,7 @@ ${kycData.documentPhoto ? '📸 Документ прикреплен' : '❌ Д
         <>
           {/* Backdrop */}
           <div 
-            className="fixed inset-0 z-[110] bg-black/60 backdrop-blur-sm transition-opacity" 
+            className="fixed inset-0 z-[110] bg-black/55 transition-opacity" 
             onClick={() => {
               if (kycHeight === 'small') {
                 setShowVerifyModal(false);
@@ -460,17 +460,12 @@ ${kycData.documentPhoto ? '📸 Документ прикреплен' : '❌ Д
             }} 
           />
           
-          {/* KYC Form Bottom Sheet */}
           <div 
-            className={`fixed bottom-0 left-1/2 -translate-x-1/2 z-[120] w-full max-w-[420px] bg-[#1c1c1e] flex flex-col rounded-t-[32px] border-t border-white/10 shadow-2xl transition-all duration-300 ease-out ${
-              isKycAnimating ? 'animate-[slideUpFromBottom_0.3s_ease-out]' : ''
-            } ${
-              kycHeight === 'full' ? 'h-[95vh]' : 'h-[70vh]'
-            }`}
+            className={`fixed bottom-0 left-1/2 -translate-x-1/2 z-[120] w-full max-w-[420px] bg-[#1c1c1e] flex flex-col rounded-t-2xl border-t border-white/10 shadow-xl transition-all duration-200 ease-out ${
+              isKycAnimating ? 'animate-[slideUpFromBottom_0.25s_ease-out]' : ''
+            } ${kycHeight === 'full' ? 'h-[90dvh]' : 'h-[65dvh]'}`}
             onClick={(e) => e.stopPropagation()}
-            style={{ 
-              willChange: isKycAnimating ? 'transform' : 'height'
-            }}
+            style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
           >
             {/* Drag Handle & Header */}
             <div className="flex-shrink-0 px-4 pt-3 pb-2">

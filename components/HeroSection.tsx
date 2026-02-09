@@ -100,15 +100,13 @@ const HeroSection: React.FC<HeroSectionProps> = ({ onScrollClick, balance, suppo
   // Конвертируем баланс в выбранную валюту
   const displayBalance = convertFromUSD(balance, currency);
   
-  // Обновление онлайна каждые 5 секунд
   useEffect(() => {
     const interval = setInterval(() => {
       setOnlineUsers(prev => {
-        const change = Math.floor(Math.random() * 50) - 25; // -25 to +25
-        const newValue = prev + change;
-        return Math.max(1000, Math.min(2000, newValue));
+        const change = Math.floor(Math.random() * 30) - 15;
+        return Math.max(1000, Math.min(2000, prev + change));
       });
-    }, 5000);
+    }, 8000);
     return () => clearInterval(interval);
   }, []);
   
@@ -186,7 +184,7 @@ const HeroSection: React.FC<HeroSectionProps> = ({ onScrollClick, balance, suppo
   }, []);
 
   return (
-    <div className="h-full flex flex-col items-center justify-between pt-6 pb-32 px-4 relative">
+    <div className="h-full flex flex-col items-center justify-between pt-4 pb-28 px-3 relative">
 
       {/* Live Notification Toast */}
       {notification && (
@@ -195,7 +193,7 @@ const HeroSection: React.FC<HeroSectionProps> = ({ onScrollClick, balance, suppo
             showNotification ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-4 pointer-events-none'
           }`}
         >
-          <div className="bg-[#1c1c1e]/95 backdrop-blur-xl border border-white/10 rounded-2xl px-4 py-3 shadow-2xl flex items-center gap-3">
+          <div className="bg-[#1c1c1e]/95 border border-white/10 rounded-xl px-3 py-2.5 shadow-xl flex items-center gap-2">
             <div className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 ${
               notification.type === 'withdraw' ? 'bg-green-500/20' :
               notification.type === 'deposit' ? 'bg-blue-500/20' : 'bg-purple-500/20'
@@ -224,8 +222,7 @@ const HeroSection: React.FC<HeroSectionProps> = ({ onScrollClick, balance, suppo
         </div>
       )}
 
-      {/* Online Users Badge */}
-      <div className="absolute top-4 right-4 flex items-center gap-2 bg-[#1c1c1e]/80 backdrop-blur-sm border border-white/10 rounded-full px-3 py-1.5">
+      <div className="absolute top-3 right-3 flex items-center gap-1.5 bg-[#1c1c1e]/90 border border-white/5 rounded-full px-2.5 py-1">
         <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
         <span className="text-white text-xs font-medium">{onlineUsers.toLocaleString()}</span>
         <Users size={14} className="text-gray-400" />
@@ -234,12 +231,10 @@ const HeroSection: React.FC<HeroSectionProps> = ({ onScrollClick, balance, suppo
       {/* Main Content */}
       <div className="flex flex-col items-center w-full max-w-md mt-4">
         {/* Logo & Balance */}
-        <div className="flex flex-col items-center mb-6">
-          <div className="w-36 h-36 mb-6 relative" style={{ willChange: 'transform' }}>
-             {/* Glow effect */}
-             <div className="absolute inset-0 bg-[#0098EA] ton-glow blur-3xl rounded-full"></div>
-             {/* Floating Animation Wrapper */}
-             <div className="w-full h-full ton-logo-container" style={{ willChange: 'transform, filter' }}>
+        <div className="flex flex-col items-center mb-4">
+          <div className="w-32 h-32 mb-4 relative">
+             <div className="absolute inset-0 bg-[#0098EA] ton-glow blur-2xl rounded-full opacity-60" />
+             <div className="w-full h-full ton-logo-container">
                  <TonLogo className="w-full h-full" />
              </div>
           </div>
@@ -256,32 +251,30 @@ const HeroSection: React.FC<HeroSectionProps> = ({ onScrollClick, balance, suppo
           </h1>
         </div>
 
-        {/* CTA Button */}
-        <div className="w-full mb-4">
+        <div className="w-full mb-3">
           <button 
              onClick={() => setShowPromoModal(true)}
-             className="w-full bg-gradient-to-r from-[#0098EA] to-[#00C896] text-white font-semibold py-3 rounded-xl shadow-lg shadow-[#0098EA]/30 transition-all transform active:scale-95 text-base flex items-center justify-center gap-2"
+             className="w-full bg-[#0098EA] hover:bg-[#0088d4] text-white font-semibold py-2.5 rounded-xl shadow-md transition-all active:scale-[0.98] text-sm flex items-center justify-center gap-2"
           >
              <Gift size={18} />
              <span>Ввести промокод</span>
           </button>
         </div>
 
-        {/* Exchange Stats */}
-        <div className="w-full grid grid-cols-3 gap-1.5 mb-4">
-          <div className="bg-[#1c1c1e]/60 border border-white/5 rounded-lg p-2 text-center">
+        <div className="w-full grid grid-cols-3 gap-1 mb-3">
+          <div className="bg-[#1c1c1e]/50 border border-white/5 rounded-lg p-1.5 text-center">
             <span className="text-[8px] text-gray-500 uppercase block mb-0.5">Капитализация</span>
             <p className="text-white text-xs font-bold">
               {formatLargeNumber(exchangeStats.capitalization, currency)}
             </p>
           </div>
-          <div className="bg-[#1c1c1e]/60 border border-white/5 rounded-lg p-2 text-center">
+          <div className="bg-[#1c1c1e]/50 border border-white/5 rounded-lg p-1.5 text-center">
             <span className="text-[8px] text-gray-500 uppercase block mb-0.5">Наторговано</span>
             <p className="text-white text-xs font-bold">
               {formatLargeNumber(exchangeStats.totalTraded, currency)}
             </p>
           </div>
-          <div className="bg-[#1c1c1e]/60 border border-white/5 rounded-lg p-2 text-center">
+          <div className="bg-[#1c1c1e]/50 border border-white/5 rounded-lg p-1.5 text-center">
             <span className="text-[8px] text-gray-500 uppercase block mb-0.5">Выведено</span>
             <p className="text-white text-xs font-bold">
               {formatLargeNumber(exchangeStats.totalWithdrawn, currency)}
@@ -310,7 +303,7 @@ const HeroSection: React.FC<HeroSectionProps> = ({ onScrollClick, balance, suppo
                 <div className="absolute inset-0 blur-xl bg-[#0098EA]/30 z-0"></div>
              </div>
              
-             <div className="border border-[#0098EA]/50 bg-[#0098EA]/10 rounded-lg px-2 py-1 text-center w-full backdrop-blur-sm shadow-[0_0_15px_rgba(0,152,234,0.3)]">
+             <div className="border border-[#0098EA]/40 bg-[#0098EA]/10 rounded-lg px-2 py-1 text-center w-full">
                 <span className="text-center text-[9px] font-bold text-white leading-tight block">
                   Фарминг<br/>в Пуле
                 </span>
@@ -329,13 +322,12 @@ const HeroSection: React.FC<HeroSectionProps> = ({ onScrollClick, balance, suppo
         </div>
       </div>
 
-      {/* Bottom Scroll Hint */}
       <div 
         onClick={onScrollClick}
-        className="flex flex-col items-center gap-1 cursor-pointer animate-bounce mt-2"
+        className="flex flex-col items-center gap-0.5 cursor-pointer animate-bounce mt-1"
       >
-        <span className="text-gray-400 text-xs">Листай вниз</span>
-        <ChevronDown className="text-gray-400" size={18} />
+        <span className="text-gray-500 text-[10px]">Листай вниз</span>
+        <ChevronDown className="text-gray-500" size={16} />
       </div>
 
       {/* --- Promo Modal (Optimized for mobile keyboard) --- */}
@@ -343,13 +335,12 @@ const HeroSection: React.FC<HeroSectionProps> = ({ onScrollClick, balance, suppo
         <>
           {/* Backdrop */}
           <div 
-            className="fixed inset-0 z-[110] bg-black/70 backdrop-blur-sm" 
+            className="fixed inset-0 z-[110] bg-black/60" 
             onClick={closePromo} 
           />
           
-          {/* Promo Form - Fixed position, won't jump with keyboard */}
           <div 
-            className="fixed inset-x-4 top-[10%] z-[120] max-w-[400px] mx-auto bg-[#1c1c1e] rounded-3xl border border-white/10 shadow-2xl overflow-hidden"
+            className="fixed inset-x-3 top-[12%] z-[120] max-w-[400px] mx-auto bg-[#1c1c1e] rounded-2xl border border-white/10 shadow-xl overflow-hidden"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Header */}

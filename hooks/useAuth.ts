@@ -6,13 +6,11 @@ import type { DbUser } from '../types';
 export const useAuth = () => {
   const [user, setUser] = useState<DbUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [showTelegramAuth, setShowTelegramAuth] = useState(false);
 
-  // Функция для установки пользователя с сохранением в localStorage
+  // Установка пользователя при авто-привязке через Telegram (с сохранением в localStorage)
   const setAuthenticatedUser = useCallback((userData: DbUser) => {
     setUser(userData);
     saveAuthData(userData);
-    setShowTelegramAuth(false);
     setIsLoading(false);
   }, []);
 
@@ -21,11 +19,10 @@ export const useAuth = () => {
     setUser(userData);
   }, []);
 
-  // Функция для выхода из системы
+  // Выход из системы (очистка данных; вход только через Telegram)
   const logout = useCallback(() => {
     setUser(null);
     clearAuthData();
-    setShowTelegramAuth(true);
   }, []);
 
   // Проверка аутентификации при загрузке
@@ -90,7 +87,6 @@ export const useAuth = () => {
           if (existingUser && !error) {
             console.log("✅ Auto-login successful - Welcome back!");
             setUser(existingUser);
-            setShowTelegramAuth(false);
             setIsLoading(false);
             return;
           } else {
@@ -103,10 +99,9 @@ export const useAuth = () => {
         }
       }
 
-      // 5. Если ничего не сработало, показываем форму аутентификации
-      console.log("❓ No valid authentication found, showing auth modal");
+      // 5. Нет данных Telegram и нет сохранённой сессии — вход только через Telegram
+      console.log("❓ No valid authentication — open app via Telegram");
       setIsLoading(false);
-      setShowTelegramAuth(true);
     };
 
     checkAuth();
@@ -115,10 +110,8 @@ export const useAuth = () => {
   return {
     user,
     isLoading,
-    showTelegramAuth,
     setAuthenticatedUser,
     updateUser,
-    logout,
-    setShowTelegramAuth
+    logout
   };
 };
