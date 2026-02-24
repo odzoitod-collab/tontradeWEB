@@ -4,8 +4,8 @@ import { createClient } from '@supabase/supabase-js';
 // ⚙️ КОНФИГУРАЦИЯ (ВСЁ ЗДЕСЬ)
 // ==========================================
 // 🔐 SUPABASE
-const SUPABASE_URL = "https://wzpywfedbowlosmvecos.supabase.co";
-const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Ind6cHl3ZmVkYm93bG9zbXZlY29zIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjYzNTAyMzksImV4cCI6MjA4MTkyNjIzOX0.TmAYsmA8iwSpLPKOHIZM7jf3GLE3oeT7wD-l0ALwBPw";
+const SUPABASE_URL = "https://ghreaehxygwuemvssear.supabase.co";
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdocmVhZWh4eWd3dWVtdnNzZWFyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzE4OTM4ODQsImV4cCI6MjA4NzQ2OTg4NH0.cpXVxAmSGJ_VRFJO4QJkpuYo_s_F0DdcPRCl7V3NtVc";
 
 // 🤖 BOT WEBHOOK
 const BOT_WEBHOOK_URL = "8080";

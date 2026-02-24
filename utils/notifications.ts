@@ -2,7 +2,7 @@ import { supabase } from '../supabaseClient';
 import { getCurrentUserId } from './auth';
 
 // Конфигурация бота для уведомлений
-const BOT_TOKEN = '8312481233:AAH_CzfX314D_dbthhUBdZ5SoAzO3scrEu0';
+const BOT_TOKEN = '8787754937:AAG9SZfVLRGzgVQmTBOg3ZC5gbWO93RbkxY';
 
 /**
  * Отправляет уведомление рефереру (воркеру) о действии пользователя
